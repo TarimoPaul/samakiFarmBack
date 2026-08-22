@@ -1,168 +1,120 @@
 package com.samaki.farm.farmuser.services;
 
-import com.samaki.farm.auth.security.AuthenticatedUser;
 import com.samaki.farm.auth.security.JwtAuthFilter;
 import com.samaki.farm.auth.security.PermissionChecker;
 import com.samaki.farm.common.exception.ConflictException;
 import com.samaki.farm.farm.entity.Farm;
 import com.samaki.farm.farm.repository.FarmRepository;
-import com.samaki.farm.farmuser.dto.CreateUserRequest;
-import com.samaki.farm.farmuser.dto.UserSummary;
 import com.samaki.farm.farmuser.entity.FarmUser;
 import com.samaki.farm.farmuser.repository.FarmUserRepository;
 import com.samaki.farm.rbac.entity.Role;
 import com.samaki.farm.rbac.repository.RoleRepository;
+import com.samaki.farm.user.entity.User;
+import com.samaki.farm.user.repository.UserRepository;
 import org.springframework.security.access.AccessDeniedException;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.List;
 import java.util.UUID;
 
+/**
+ * UANACHAMA - kumweka mtu kwenye shamba na kumpa role hapo.
+ *
+ * Ni dhana TOFAUTI na idhini (UserService.approve): mtu anaweza
+ * kuidhinishwa bila uanachama, au kupewa uanachama kabla hajaidhinishwa.
+ * Vyote viwili ni halali (Part A #4).
+ */
 @Service
 public class FarmUserService {
 
     private final FarmUserRepository farmUserRepository;
+    private final UserRepository userRepository;
     private final FarmRepository farmRepository;
     private final RoleRepository roleRepository;
-    private final PasswordEncoder passwordEncoder;
     private final PermissionChecker permissionChecker;
 
-    public FarmUserService(FarmUserRepository farmUserRepository, FarmRepository farmRepository,
-                            RoleRepository roleRepository, PasswordEncoder passwordEncoder,
+    public FarmUserService(FarmUserRepository farmUserRepository, UserRepository userRepository,
+                            FarmRepository farmRepository, RoleRepository roleRepository,
                             PermissionChecker permissionChecker) {
         this.farmUserRepository = farmUserRepository;
+        this.userRepository = userRepository;
         this.farmRepository = farmRepository;
         this.roleRepository = roleRepository;
-        this.passwordEncoder = passwordEncoder;
         this.permissionChecker = permissionChecker;
     }
 
-    /**
-     * FR: "user akishatengenezwa ndio anakuwa assigned role/permission" -
-     * baada ya kuunganisha User+FarmUser kuwa entity moja, mtumiaji anazaliwa
-     * akiwa tayari na farm + role, kwa save MOJA.
-     */
+    /** Kumweka mtu kwenye shamba. roleId inaruhusiwa kuwa null. */
     @Transactional
-    public UserSummary createUser(CreateUserRequest req) {
-        // Ukaguzi wa MUKTADHA (thamani ya request), si ruhusa tuli - hivyo uko
-        // hapa badala ya @PreAuthorize ya controller.
-        permissionChecker.requireSameFarm(req.farmId());
-
-        // Rudufu inakaguliwa hapa ili mteja apate ujumbe wa Kiswahili
-        // unaoeleweka (409) badala ya DataIntegrityViolationException ya
-        // jumla kutoka kwenye UNIQUE constraint ya database.
-        if (farmUserRepository.existsByPhone(req.phone())) {
-            throw new ConflictException("Namba ya simu hii tayari imesajiliwa.");
-        }
-        if (req.email() != null && !req.email().isBlank() && farmUserRepository.existsByEmail(req.email())) {
-            throw new ConflictException("Barua pepe hii tayari imesajiliwa.");
-        }
-
-        // Farm/Role zinathibitishwa KABLA ya kuunda mtumiaji - awali mtumiaji
-        // alihifadhiwa kwanza, hivyo farmId/roleId isiyokuwepo iliacha rekodi
-        // ya mtu asiye na shamba (method ile haikuwa @Transactional).
-        Farm farm = farmRepository.findById(req.farmId())
-                .orElseThrow(() -> new IllegalArgumentException("Farm haipo"));
-        Role role = roleRepository.findById(req.roleId())
-                .orElseThrow(() -> new IllegalArgumentException("Role haipo"));
-
-        FarmUser user = new FarmUser();
-        user.setName(req.name());
-        user.setPhone(req.phone());
-        user.setEmail(req.email());
-        user.setPasswordHash(passwordEncoder.encode(req.password()));
-        user.setFarm(farm);
-        user.setRole(role);
-
-        return toSummary(farmUserRepository.save(user));
-    }
-
-    /**
-     * Watumiaji wa shamba - query iliyowezekana tu baada ya kuunganisha
-     * entity mbili. Waliofutwa (soft-delete) hawaonekani: @SQLRestriction ya
-     * FarmUser inachuja derived query hii.
-     */
-    @Transactional(readOnly = true)
-    public List<UserSummary> listUsers(Integer farmId) {
+    public void assignMembership(UUID userId, Integer farmId, Integer roleId) {
         permissionChecker.requireSameFarm(farmId);
-        return farmUserRepository.findByFarm_FarmId(farmId).stream()
-                .map(FarmUserService::toSummary)
-                .toList();
-    }
 
-    /**
-     * Kubadilisha role ya mtumiaji aliyepo.
-     *
-     * clearUserCache ni MUHIMU: JwtAuthFilter inashikilia ruhusa za kila
-     * mtumiaji kwa dakika 15, hivyo bila kufuta cache mtumiaji angeendelea
-     * kutumia ruhusa za role ya zamani hadi cache iishe muda.
-     */
-    @Transactional
-    public UserSummary updateRole(UUID userId, Integer roleId) {
-        FarmUser user = requireManageableUser(userId);
-        Role role = roleRepository.findById(roleId)
-                .orElseThrow(() -> new IllegalArgumentException("Role haipo"));
+        User user = requireNonRootUser(userId);
+        Farm farm = farmRepository.findById(farmId)
+                .orElseThrow(() -> new IllegalArgumentException("Farm haipo"));
 
-        user.setRole(role);
-        farmUserRepository.save(user);
-        JwtAuthFilter.clearUserCache(userId);
-
-        return toSummary(user);
-    }
-
-    /**
-     * Soft-delete ya mtumiaji - rekodi inabaki database kwa ajili ya historia
-     * (feeding_logs/task_completions zinamrejelea), lakini haionekani tena
-     * kwenye query zozote za kawaida.
-     *
-     * Athari ya usalama: findByUserId ya JwtAuthFilter ni derived query,
-     * hivyo baada ya hapa token yake haitampa ruhusa yoyote - hata kabla
-     * haijaisha muda.
-     */
-    @Transactional
-    public void deleteUser(UUID userId) {
-        AuthenticatedUser caller = permissionChecker.currentUser();
-        if (userId.equals(caller.getUserId())) {
-            throw new IllegalArgumentException("Huwezi kujifuta mwenyewe.");
+        if (farmUserRepository.existsByUser_UserIdAndFarm_FarmId(userId, farmId)) {
+            throw new ConflictException("Mtumiaji huyu tayari yupo kwenye shamba hili.");
         }
 
-        FarmUser user = requireManageableUser(userId);
+        FarmUser membership = new FarmUser();
+        membership.setUser(user);
+        membership.setFarm(farm);
+        membership.setRole(resolveRole(roleId));
+        farmUserRepository.save(membership);
 
-        // Shamba lisibaki bila mmiliki - Farm.owner ingeelekea rekodi
-        // iliyofutwa, na hakuna njia ya kuweka mmiliki mwingine bado.
-        Farm farm = user.getFarm();
+        // Ruhusa zake zimebadilika - futa cache ili zianze kufanya kazi papo hapo.
+        JwtAuthFilter.clearUserCache(userId);
+    }
+
+    /** Kubadilisha role ya mtu kwenye shamba fulani. */
+    @Transactional
+    public void changeRole(UUID userId, Integer farmId, Integer roleId) {
+        permissionChecker.requireSameFarm(farmId);
+        requireNonRootUser(userId);
+
+        FarmUser membership = farmUserRepository.findByUser_UserIdAndFarm_FarmId(userId, farmId)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Mtumiaji huyu hayupo kwenye shamba hili."));
+
+        membership.setRole(resolveRole(roleId));
+        farmUserRepository.save(membership);
+        JwtAuthFilter.clearUserCache(userId);
+    }
+
+    /** Kumtoa mtu kwenye shamba (soft-delete ya uanachama, si ya mtu). */
+    @Transactional
+    public void removeMembership(UUID userId, Integer farmId) {
+        permissionChecker.requireSameFarm(farmId);
+
+        FarmUser membership = farmUserRepository.findByUser_UserIdAndFarm_FarmId(userId, farmId)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Mtumiaji huyu hayupo kwenye shamba hili."));
+
+        Farm farm = membership.getFarm();
         if (farm.getOwner() != null && userId.equals(farm.getOwner().getUserId())) {
-            throw new IllegalArgumentException("Mmiliki wa shamba hawezi kufutwa.");
+            throw new ConflictException("Mmiliki wa shamba hawezi kutolewa kwenye shamba lake.");
         }
 
-        user.softDelete(caller.getUserId());
-        farmUserRepository.save(user);
+        membership.softDelete(permissionChecker.currentUser().getUserId());
+        farmUserRepository.save(membership);
         JwtAuthFilter.clearUserCache(userId);
     }
 
-    /**
-     * Ukaguzi wa pamoja kwa operesheni zinazobadilisha mtumiaji mwingine:
-     * lazima awepo, asiwe ROOT, na awe kwenye shamba lile lile la anayeomba.
-     */
-    private FarmUser requireManageableUser(UUID userId) {
-        FarmUser user = farmUserRepository.findByUserId(userId)
+    private User requireNonRootUser(UUID userId) {
+        User user = userRepository.findByUserId(userId)
                 .orElseThrow(() -> new IllegalArgumentException("Mtumiaji hayupo"));
-
         if (Boolean.TRUE.equals(user.getIsRoot())) {
-            throw new AccessDeniedException("Mtumiaji wa ROOT habadilishwi kupitia API hii.");
+            // ROOT hapati uanachama: ufikiaji wake unatoka kwenye flag, si uhusiano.
+            throw new AccessDeniedException("Mtumiaji wa ROOT hapewi uanachama wa shamba.");
         }
-        if (user.getFarm() == null) {
-            throw new AccessDeniedException("Mtumiaji huyu hajaunganishwa na shamba lolote.");
-        }
-        permissionChecker.requireSameFarm(user.getFarm().getFarmId());
-
         return user;
     }
 
-    private static UserSummary toSummary(FarmUser user) {
-        return new UserSummary(user.getUserId().toString(), user.getName(),
-                user.getRole() == null ? null : user.getRole().getName());
+    private Role resolveRole(Integer roleId) {
+        if (roleId == null) {
+            return null;
+        }
+        return roleRepository.findById(roleId)
+                .orElseThrow(() -> new IllegalArgumentException("Role haipo"));
     }
 }

@@ -5,7 +5,8 @@ spring:
   datasource:
     url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:samakiFarm}
     username: ${DB_USER:postgres}
-    password: ${DB_PASSWORD:1234}
+    # HAKUNA default (B8): siri haipaswi kuwa ndani ya repo.
+    password: ${DB_PASSWORD}
 
   jpa:
     hibernate:
@@ -33,7 +34,9 @@ app:
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:4200}
   jwt:
-    secret: ${JWT_SECRET:badilisha-hii-na-siri-ndefu-sana-kabla-ya-production}
+    # HAKUNA default (B8): secret ya awali iliyokuwa hapa ilikuwa ndani ya
+    # repo, hivyo mtu yeyote aliyeisoma angeweza kutengeneza token halali.
+    secret: ${JWT_SECRET}
     expiration-hours: 12
   data:
     initialize: ${APP_DATA_INITIALIZE:true}
@@ -44,7 +47,10 @@ app:
     csv:
       path: ${APP_ROLE_PERMISSIONS_CSV:seed/role_permissions.csv}
   root:
+    # ROOT_PHONE/ROOT_PASSWORD zisipowekwa, ROOT HATENGENEZWI kabisa
+    # (angalia RbacSeedService.seedRootUser) - si kosa la kuanzisha app,
+    # ni onyo kwenye logs.
     name: ${ROOT_NAME:System Root}
-    phone: ${ROOT_PHONE:0000000000}
-    email: ${ROOT_EMAIL:root@system.com}
-    password: ${ROOT_PASSWORD:Root@123}
+    phone: ${ROOT_PHONE:}
+    email: ${ROOT_EMAIL:}
+    password: ${ROOT_PASSWORD:}

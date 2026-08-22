@@ -3,7 +3,7 @@ package com.samaki.farm.farm.entity;
 import org.hibernate.annotations.SQLRestriction;
 
 import com.samaki.farm.common.entity.BaseEntity;
-import com.samaki.farm.farmuser.entity.FarmUser;
+import com.samaki.farm.user.entity.User;
 
 import jakarta.persistence.*;
 import lombok.Data;
@@ -26,5 +26,5 @@ public class Farm extends BaseEntity {
 
     @ManyToOne
     @JoinColumn(name = "owner_user_id")
-    private FarmUser owner;
+    private User owner;
 }

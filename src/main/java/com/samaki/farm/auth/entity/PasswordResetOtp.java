@@ -3,7 +3,7 @@ package com.samaki.farm.auth.entity;
 import org.hibernate.annotations.SQLRestriction;
 
 import com.samaki.farm.common.entity.BaseEntity;
-import com.samaki.farm.farmuser.entity.FarmUser;
+import com.samaki.farm.user.entity.User;
 
 import jakarta.persistence.*;
 import lombok.Data;
@@ -31,7 +31,7 @@ public class PasswordResetOtp extends BaseEntity {
 
     @ManyToOne
     @JoinColumn(name = "user_id")
-    private FarmUser user;
+    private User user;
 
     @Column(name = "code_hash", nullable = false)
     private String codeHash;

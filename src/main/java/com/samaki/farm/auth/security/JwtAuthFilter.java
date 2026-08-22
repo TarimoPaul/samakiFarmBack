@@ -1,9 +1,12 @@
 package com.samaki.farm.auth.security;
 
 import com.samaki.farm.farmuser.entity.FarmUser;
+import com.samaki.farm.farmuser.repository.FarmUserRepository;
 import com.samaki.farm.rbac.entity.Permission;
 import com.samaki.farm.rbac.entity.Role;
-import com.samaki.farm.farmuser.repository.FarmUserRepository;
+import com.samaki.farm.user.entity.User;
+import com.samaki.farm.user.entity.UserStatus;
+import com.samaki.farm.user.repository.UserRepository;
 import com.samaki.farm.rbac.repository.PermissionRepository;
 import com.samaki.farm.rbac.repository.RoleRepository;
 import io.jsonwebtoken.Claims;
@@ -80,13 +83,16 @@ public class JwtAuthFilter extends OncePerRequestFilter {
     }
 
     private final JwtUtil jwtUtil;
+    private final UserRepository userRepository;
     private final FarmUserRepository farmUserRepository;
     private final PermissionRepository permissionRepository;
     private final RoleRepository roleRepository;
 
-    public JwtAuthFilter(JwtUtil jwtUtil, FarmUserRepository farmUserRepository,
+    public JwtAuthFilter(JwtUtil jwtUtil, UserRepository userRepository,
+                          FarmUserRepository farmUserRepository,
                           PermissionRepository permissionRepository, RoleRepository roleRepository) {
         this.jwtUtil = jwtUtil;
+        this.userRepository = userRepository;
         this.farmUserRepository = farmUserRepository;
         this.permissionRepository = permissionRepository;
         this.roleRepository = roleRepository;
@@ -135,29 +141,50 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             return cached.user();
         }
 
-        // Baada ya kuunganisha User+FarmUser: query MOJA badala ya "tafuta
-        // mtumiaji, kisha tafuta uanachama wake". farm/role zinaweza kuwa null
-        // (mtumiaji hajaunganishwa na shamba bado) - hivyo kila mojawapo
-        // inakaguliwa peke yake badala ya kuchukulia zote zipo.
-        FarmUser farmUser = farmUserRepository.findByUserId(userId).orElse(null);
-        AuthenticatedUser fresh;
-        if (farmUser == null) {
-            fresh = new AuthenticatedUser(userId, null, null, null, List.of(), false);
-        } else {
-            Role role = farmUser.getRole();
-            List<String> permissionCodes = (role == null || role.getPermissions() == null) ? List.of() :
-                    role.getPermissions().stream().map(Permission::getCode).toList();
-            fresh = new AuthenticatedUser(
-                    userId,
-                    farmUser.getFarm() == null ? null : farmUser.getFarm().getFarmId(),
-                    role == null ? null : role.getRoleId(),
-                    role == null ? null : role.getName(),
-                    permissionCodes,
-                    false);
-        }
-
+        AuthenticatedUser fresh = resolveFromDatabase(userId);
         userCache.put(userId, new CachedUser(fresh, now));
         return fresh;
+    }
+
+    /**
+     * Hatua mbili: mtu kwanza (hali ya akaunti), kisha uanachama wake.
+     *
+     * Hali inakaguliwa HAPA, si wakati wa login pekee: mtu aliyezuiwa
+     * (DISABLED) au kufutwa anapoteza ruhusa ZOTE mara moja, hata kama
+     * token yake bado haijaisha muda. UserService inafuta cache yake
+     * anapobadilishwa, hivyo athari ni ya papo hapo.
+     */
+    private AuthenticatedUser resolveFromDatabase(UUID userId) {
+        AuthenticatedUser noAccess = new AuthenticatedUser(userId, null, null, null, List.of(), false);
+
+        // findByUserId ni derived query, hivyo @SQLRestriction inatumika:
+        // mtu aliyefutwa harudishwi kabisa.
+        User user = userRepository.findByUserId(userId).orElse(null);
+        if (user == null || user.getStatus() != UserStatus.ACTIVE) {
+            return noAccess;
+        }
+
+        // TODO: farm switching - kwa sasa uanachama wa kwanza pekee
+        // (umepangwa kwa farmId ili uwe thabiti).
+        List<FarmUser> memberships = farmUserRepository.findByUser_UserIdOrderByFarm_FarmIdAsc(userId);
+        if (memberships.isEmpty()) {
+            // Mtu ameidhinishwa lakini hajapangiwa shamba - anaingia, lakini
+            // hana ruhusa yoyote. Hii ni hali HALALI (Part A #4).
+            return noAccess;
+        }
+
+        FarmUser membership = memberships.get(0);
+        Role role = membership.getRole();
+        List<String> permissionCodes = (role == null || role.getPermissions() == null) ? List.of()
+                : role.getPermissions().stream().map(Permission::getCode).toList();
+
+        return new AuthenticatedUser(
+                userId,
+                membership.getFarm() == null ? null : membership.getFarm().getFarmId(),
+                role == null ? null : role.getRoleId(),
+                role == null ? null : role.getName(),
+                permissionCodes,
+                false);
     }
 
     /**

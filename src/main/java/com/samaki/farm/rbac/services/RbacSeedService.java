@@ -1,8 +1,9 @@
 package com.samaki.farm.rbac.services;
 
 import com.samaki.farm.auth.security.JwtAuthFilter;
-import com.samaki.farm.farmuser.entity.FarmUser;
-import com.samaki.farm.farmuser.repository.FarmUserRepository;
+import com.samaki.farm.user.entity.User;
+import com.samaki.farm.user.entity.UserStatus;
+import com.samaki.farm.user.repository.UserRepository;
 import com.samaki.farm.rbac.entity.Permission;
 import com.samaki.farm.rbac.entity.Role;
 import com.samaki.farm.rbac.repository.PermissionRepository;
@@ -59,25 +60,29 @@ public class RbacSeedService {
     @Value("${app.root.name:System Root}")
     private String rootName;
 
-    @Value("${app.root.phone:0000000000}")
+    // HAKUNA default kwa hivi vitatu KWA MAKUSUDI (B8): siri haipaswi kuwa
+    // ndani ya code wala application.yml. Bila environment variables, ROOT
+    // HAITENGENEZWI kabisa - ni salama zaidi kuliko kuwa na password
+    // inayojulikana na kila anayesoma repo.
+    @Value("${app.root.phone:}")
     private String rootPhone;
 
-    @Value("${app.root.email:root@system.com}")
+    @Value("${app.root.email:}")
     private String rootEmail;
 
-    @Value("${app.root.password:ChangeMe@123}")
+    @Value("${app.root.password:}")
     private String rootPassword;
 
     private final PermissionRepository permissionRepository;
     private final RoleRepository roleRepository;
-    private final FarmUserRepository farmUserRepository;
+    private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
 
     public RbacSeedService(PermissionRepository permissionRepository, RoleRepository roleRepository,
-                            FarmUserRepository farmUserRepository, PasswordEncoder passwordEncoder) {
+                            UserRepository userRepository, PasswordEncoder passwordEncoder) {
         this.permissionRepository = permissionRepository;
         this.roleRepository = roleRepository;
-        this.farmUserRepository = farmUserRepository;
+        this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
     }
 
@@ -160,39 +165,61 @@ public class RbacSeedService {
         }
     }
 
+    /**
+     * B8 - ROOT anatengenezwa MARA MOJA TU (idempotent) na siri zake
+     * zinatoka environment variables pekee.
+     *
+     * Bila ROOT_PHONE/ROOT_PASSWORD, HAKUNA ROOT anayetengenezwa - app
+     * inaendelea kufanya kazi, lakini kwa onyo kubwa. Ni salama zaidi
+     * kuliko kuunda msimamizi mkuu mwenye password inayojulikana na kila
+     * anayesoma repo.
+     */
     private void seedRootUser() {
-        Optional<FarmUser> existing = farmUserRepository.findByPhone(rootPhone);
+        if (rootPhone == null || rootPhone.isBlank() || rootPassword == null || rootPassword.isBlank()) {
+            logger.warn("ROOT hajatengenezwa: ROOT_PHONE na/au ROOT_PASSWORD hazijawekwa. "
+                    + "Weka environment variables hizo kisha anzisha app upya.");
+            return;
+        }
+
+        Optional<User> existing = userRepository.findByPhone(rootPhone);
         if (existing.isPresent()) {
-            FarmUser root = existing.get();
+            User root = existing.get();
             boolean changed = false;
             if (!Boolean.TRUE.equals(root.getIsRoot())) {
                 root.setIsRoot(true);
                 changed = true;
             }
-            if (root.getEmail() == null || root.getEmail().isBlank()) {
+            if (root.getStatus() != UserStatus.ACTIVE) {
+                root.setStatus(UserStatus.ACTIVE);
+                changed = true;
+            }
+            if ((root.getEmail() == null || root.getEmail().isBlank())
+                    && rootEmail != null && !rootEmail.isBlank()) {
                 root.setEmail(rootEmail);
                 changed = true;
             }
             if (changed) {
-                farmUserRepository.save(root);
-                logger.info("Mtumiaji wa ROOT aliyepo amesasishwa (isRoot/email): {}", rootPhone);
+                userRepository.save(root);
+                logger.info("Mtumiaji wa ROOT aliyepo amesasishwa (isRoot/status/email)");
             }
+            // Password HAIGUSWI hapa: ikibadilishwa kwenye kila restart,
+            // password aliyoiweka ROOT mwenyewe ingefutwa.
             return;
         }
 
-        // ROOT anabaki bila farm/role (zote ni NULLable) - ufikiaji wake
-        // unatoka kwenye isRoot flag pekee, si uhusiano wowote.
-        FarmUser root = new FarmUser();
+        // ROOT hana uanachama - ufikiaji wake unatoka kwenye isRoot flag
+        // pekee, si uhusiano wowote wa shamba/role.
+        User root = new User();
         root.setName(rootName);
         root.setPhone(rootPhone);
-        root.setEmail(rootEmail);
+        root.setEmail(rootEmail == null || rootEmail.isBlank() ? null : rootEmail);
         root.setPasswordHash(passwordEncoder.encode(rootPassword));
-        root.setStatus("ACTIVE");
+        root.setStatus(UserStatus.ACTIVE);
         root.setIsRoot(true);
-        // createdAt haiwekwi kwa mkono tena - @CreatedDate (AuditingConfig)
-        // ndiyo inayoiweka, na ingeandika juu ya thamani yoyote ya hapa.
-        farmUserRepository.save(root);
-        logger.info("Mtumiaji wa ROOT ametengenezwa: {}", rootPhone);
+        // Password ya awali inatoka environment - lazima ibadilishwe.
+        root.setMustChangePassword(true);
+        userRepository.save(root);
+        logger.info("Mtumiaji wa ROOT ametengenezwa. Lazima abadilishe password mara ya kwanza.");
     }
 
     private List<String[]> readCsvRows(String path) {

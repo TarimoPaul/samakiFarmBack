@@ -1,6 +1,9 @@
 package com.samaki.farm.common.web;
 
 import com.samaki.farm.common.exception.ConflictException;
+import com.samaki.farm.common.exception.ErrorCodes;
+import com.samaki.farm.common.exception.ForbiddenException;
+import com.samaki.farm.common.exception.TooManyRequestsException;
 import com.samaki.farm.common.exception.UnauthorizedException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -52,9 +55,25 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(ApiResponse.error(ex.getMessage()));
     }
 
+    // errorCode inapitishwa hapa: frontend inatawi kwa msimbo
+    // (PENDING_APPROVAL / ACCOUNT_DISABLED / INVALID_CREDENTIALS), si kwa
+    // ujumbe wa Kiswahili unaoweza kubadilika.
     @ExceptionHandler(UnauthorizedException.class)
     public ResponseEntity<ApiResponse<Void>> handleUnauthorized(UnauthorizedException ex) {
-        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(ApiResponse.error(ex.getMessage()));
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body(ApiResponse.error(ex.getMessage(), ex.getErrorCode()));
+    }
+
+    @ExceptionHandler(ForbiddenException.class)
+    public ResponseEntity<ApiResponse<Void>> handleForbidden(ForbiddenException ex) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(ApiResponse.error(ex.getMessage(), ex.getErrorCode()));
+    }
+
+    @ExceptionHandler(TooManyRequestsException.class)
+    public ResponseEntity<ApiResponse<Void>> handleTooManyRequests(TooManyRequestsException ex) {
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .body(ApiResponse.error(ex.getMessage(), ErrorCodes.TOO_MANY_REQUESTS));
     }
 
     @ExceptionHandler(IllegalArgumentException.class)

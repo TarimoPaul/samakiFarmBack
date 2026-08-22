@@ -4,9 +4,11 @@ view_dashboard,FARM,REPORTING,Kuona dashibodi/ripoti
 edit_cycle,FARM,PRODUCTION,Kuongeza/kuhariri mizunguko ya uzalishaji
 manage_units,FARM,PRODUCTION,Kuongeza/kuhariri matanki/mabwawa
 mark_task_done,FARM,TASKS,Kuweka kazi ya kila siku kuwa imekamilika
+manage_farms,FARM,FARM_MANAGEMENT,Kuunda na kuorodhesha mashamba
 
 # ==================== FINANCE MODULE ====================
 view_finance,FINANCE,REPORTING,Kuona gharama/mauzo/faida
 
 # ==================== UAA MODULE ====================
 manage_users,UAA,USER_MANAGEMENT,Kusimamia watumiaji/roles/ruhusa
+approve_users,UAA,USER_MANAGEMENT,Kuidhinisha watumiaji waliojisajili

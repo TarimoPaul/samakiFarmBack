@@ -1,7 +1,7 @@
 package com.samaki.farm.auth.services;
 
-import com.samaki.farm.farmuser.entity.FarmUser;
 import com.samaki.farm.auth.entity.PasswordResetOtp;
+import com.samaki.farm.user.entity.User;
 import com.samaki.farm.common.notification.SmsSender;
 import com.samaki.farm.auth.repository.PasswordResetOtpRepository;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -49,7 +49,7 @@ public class PasswordResetService {
      * kwa mteja (angalia comment ya class kuhusu user enumeration).
      */
     @Transactional
-    public void issueOtp(FarmUser user) {
+    public void issueOtp(User user) {
         Instant now = Instant.now();
         Optional<PasswordResetOtp> latest =
                 otpRepository.findFirstByUser_UserIdAndUsedAtIsNullOrderByCreatedAtDesc(user.getUserId());
@@ -76,7 +76,7 @@ public class PasswordResetService {
 
     /** Inathibitisha OTP na kuitumia (mara moja tu) - true ikiwa sahihi/halali. */
     @Transactional
-    public boolean verifyAndConsume(FarmUser user, String submittedCode) {
+    public boolean verifyAndConsume(User user, String submittedCode) {
         Optional<PasswordResetOtp> otpOpt =
                 otpRepository.findFirstByUser_UserIdAndUsedAtIsNullOrderByCreatedAtDesc(user.getUserId());
         if (otpOpt.isEmpty()) {

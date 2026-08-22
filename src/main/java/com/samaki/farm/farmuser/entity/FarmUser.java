@@ -1,71 +1,43 @@
 package com.samaki.farm.farmuser.entity;
 
-import org.hibernate.annotations.SQLRestriction;
-
 import com.samaki.farm.common.entity.BaseEntity;
 import com.samaki.farm.farm.entity.Farm;
 import com.samaki.farm.rbac.entity.Role;
-
+import com.samaki.farm.user.entity.User;
 import jakarta.persistence.*;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.ToString;
+import org.hibernate.annotations.SQLRestriction;
 
+import java.io.Serializable;
 import java.util.UUID;
 
 /**
- * Mtumiaji wa mfumo - utambulisho (phone/email/password) PAMOJA na muktadha
- * wake wa shamba (farm + role) kwenye entity moja.
+ * UANACHAMA - "mtu HUYU, kwenye shamba HILI, ana role HII".
  *
- * Awali hizi zilikuwa mbili: `User` (mtu) na `FarmUser` (join-table ya
- * uanachama farm<->user<->role). Zimeunganishwa (angalia migration
- * V4__merge_users_into_farm_users.sql) - mtu mmoja sasa ana shamba MOJA na
- * role MOJA. Multi-farm haiwezekani tena kimuundo, lakini haikuwa
- * inatumika kivitendo: kila mahali code ilikuwa inachukua scopes.get(0) tu.
+ * PK ni (user_id, farm_id): mtu anaweza kuwa na uanachama kwenye mashamba
+ * mengi, lakini role MOJA kwa kila shamba.
  *
- * farm na role ni NULLable kwa sababu ya ROOT: isRoot=true anaingia na
- * kufanya kazi bila kuunganishwa na shamba lolote (angalia JwtAuthFilter/
- * PermissionChecker) - ufikiaji wake unatoka kwenye flag, si uhusiano.
+ * role inaruhusiwa kuwa null: kuidhinishwa (User.status = ACTIVE) na kupewa
+ * role ni vitu viwili tofauti (Part A #4). Mtu anaweza kuingia akiwa bado
+ * hana ruhusa yoyote na kuona ukurasa mtupu.
  */
 @SQLRestriction("is_deleted = false")
 @Entity
 @Table(name = "farm_users")
+@IdClass(FarmUser.FarmUserId.class)
 @Data
-// of = "userId" pekee: bila hii, @Data ingejumuisha farm/role kwenye
-// equals/hashCode - na kuzilazimisha lazy proxies kupakiwa kila
-// wakati entity inapowekwa kwenye Set/Map.
-@EqualsAndHashCode(callSuper = false, of = "userId")
-// Farm.owner ni FarmUser na FarmUser.farm ni Farm - bila exclude hii,
-// toString ya pande zote mbili ingeingia kwenye mzunguko usioisha.
-@ToString(exclude = {"farm", "role"})
+@EqualsAndHashCode(callSuper = false, of = {"user", "farm"})
+@ToString(exclude = {"user", "farm", "role"})
 public class FarmUser extends BaseEntity {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
-    @Column(name = "user_id")
-    private UUID userId;
+    @ManyToOne
+    @JoinColumn(name = "user_id")
+    private User user;
 
-    private String name;
-
-    @Column(unique = true, nullable = false)
-    private String phone;
-
-    @Column(unique = true)
-    private String email;
-
-    @Column(name = "password_hash", nullable = false)
-    private String passwordHash;
-
-    @Column(name = "push_token")
-    private String pushToken;
-
-    private String status = "ACTIVE";
-
-    // ROOT bypass flag (kama Lsms): huru na role yoyote - ROOT haihitaji
-    // farm/role kuwa na ufikiaji kamili. Angalia PermissionChecker/JwtAuthFilter.
-    @Column(name = "is_root", nullable = false)
-    private Boolean isRoot = false;
-
+    @Id
     @ManyToOne
     @JoinColumn(name = "farm_id")
     private Farm farm;
@@ -73,4 +45,14 @@ public class FarmUser extends BaseEntity {
     @ManyToOne
     @JoinColumn(name = "role_id")
     private Role role;
+
+    /**
+     * Aina za field hapa ni za VITAMBULISHO vya entity husika (UUID kwa User,
+     * Integer kwa Farm), si entity zenyewe - ndivyo @IdClass inavyotaka.
+     */
+    @Data
+    public static class FarmUserId implements Serializable {
+        private UUID user;
+        private Integer farm;
+    }
 }
