@@ -1,0 +1,22 @@
+role_name,permission_code
+# OWNER - ufikiaji kamili wa shamba lake (SI ROOT - bado ni role ya kawaida)
+OWNER,view_dashboard
+OWNER,edit_cycle
+OWNER,manage_units
+OWNER,mark_task_done
+OWNER,view_finance
+OWNER,manage_users
+
+# FARM_MANAGER - anaendesha uzalishaji na fedha, hasimamii watumiaji
+FARM_MANAGER,view_dashboard
+FARM_MANAGER,edit_cycle
+FARM_MANAGER,manage_units
+FARM_MANAGER,mark_task_done
+FARM_MANAGER,view_finance
+
+# WORKER - kazi za kila siku pekee
+WORKER,view_dashboard
+WORKER,mark_task_done
+
+# VIEWER - ripoti tu, hana uwezo wa kubadilisha chochote
+VIEWER,view_dashboard

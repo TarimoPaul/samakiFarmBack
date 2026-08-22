@@ -1,0 +1,48 @@
+type Query {
+    productionUnits: [ProductionUnit!]!
+    cycles(status: String): [Cycle!]!
+}
+
+type Mutation {
+    createProductionUnit(input: CreateProductionUnitInput!): ProductionUnit!
+    createCycle(input: CreateCycleInput!): Cycle!
+}
+
+type ProductionUnit {
+    unitId: ID!
+    code: String!
+    type: String!
+    sizeM3: Float
+    waterSource: String
+    status: String!
+}
+
+input CreateProductionUnitInput {
+    code: String!
+    type: String!
+    sizeM3: Float
+    waterSource: String
+}
+
+type Cycle {
+    cycleId: ID!
+    unit: ProductionUnit!
+    speciesName: String!
+    stockingDate: String!
+    fingerlingsCount: Int!
+    survivalRateEstimate: Float!
+    expectedHarvestDate: String
+    actualHarvestDate: String
+    status: String!
+}
+
+input CreateCycleInput {
+    unitId: ID!
+    speciesId: ID!
+    stockingDate: String!
+    fingerlingsCount: Int!
+    survivalRateEstimate: Float
+}
+
+# Moduli zilizobaki (Feed, WaterQuality, DailyTasks, Finance) zitaongezwa
+# hapa kwa muundo uleule - angalia SRS §8 kwa orodha kamili.
