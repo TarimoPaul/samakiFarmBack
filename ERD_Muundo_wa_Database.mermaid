@@ -116,6 +116,12 @@ erDiagram
         numeric_12_2_ unit_cost
         numeric_14_2_ total_cost
         varchar_150_ supplier
+        timestamptz created_at
+        timestamptz updated_at
+        timestamptz deleted_at
+        boolean is_deleted
+        uuid updated_by FK
+        uuid deleted_by FK
     }
     feed_stock_movements {
         integer movement_id PK
@@ -125,6 +131,12 @@ erDiagram
         integer reference_purchase_id FK
         integer reference_feeding_log_id FK
         timestamptz moved_at
+        timestamptz created_at
+        timestamptz updated_at
+        timestamptz deleted_at
+        boolean is_deleted
+        uuid updated_by FK
+        uuid deleted_by FK
     }
     feeding_logs {
         integer log_id PK
@@ -133,6 +145,12 @@ erDiagram
         varchar_80_ feed_type
         numeric_8_2_ quantity_kg
         uuid recorded_by_user_id FK
+        timestamptz created_at
+        timestamptz updated_at
+        timestamptz deleted_at
+        boolean is_deleted
+        uuid updated_by FK
+        uuid deleted_by FK
     }
     password_reset_otps {
         bigint otp_id PK

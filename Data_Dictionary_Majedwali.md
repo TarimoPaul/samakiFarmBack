@@ -4,7 +4,7 @@
 > Chanzo: database halisi. Izalishe upya baada ya kila migration:
 > `./tools/generate-docs.ps1`
 >
-> Toleo la 2026-08-22. Jedwali: **21**. Safu: **183**.
+> Toleo la 2026-08-22. Jedwali: **21**. Safu: **201**.
 
 ## Migrations zilizotumika
 
@@ -15,6 +15,7 @@
 - **V5** - unmerge users and farm users _(2026-08-22)_
 - **V6** - user account lifecycle _(2026-08-22)_
 - **V7** - auth permissions _(2026-08-22)_
+- **V8** - feed module _(2026-08-22)_
 
 ## Muhtasari
 
@@ -327,11 +328,23 @@
 | `unit_cost` | numeric(12,2) | NOT NULL |  |
 | `total_cost` | numeric(14,2) |  | GENERATED |
 | `supplier` | varchar(150) |  |  |
+| `created_at` | timestamptz | NOT NULL | now() |
+| `updated_at` | timestamptz |  |  |
+| `deleted_at` | timestamptz |  |  |
+| `is_deleted` | boolean | NOT NULL | false |
+| `updated_by` | uuid |  |  |
+| `deleted_by` | uuid |  |  |
 
 **Vikwazo:**
 
 - **PK** `feed_purchases_pkey` - PRIMARY KEY (purchase_id)
+- **FK** `feed_purchases_deleted_by_fkey` - FOREIGN KEY (deleted_by) REFERENCES users(user_id)
 - **FK** `feed_purchases_farm_id_fkey` - FOREIGN KEY (farm_id) REFERENCES farms(farm_id) ON DELETE CASCADE
+- **FK** `feed_purchases_updated_by_fkey` - FOREIGN KEY (updated_by) REFERENCES users(user_id)
+
+**Index:**
+
+- `idx_feed_purchases_farm`
 
 ### `feeding_logs`
 
@@ -343,12 +356,24 @@
 | `feed_type` | varchar(80) |  |  |
 | `quantity_kg` | numeric(8,2) | NOT NULL |  |
 | `recorded_by_user_id` | uuid |  |  |
+| `created_at` | timestamptz | NOT NULL | now() |
+| `updated_at` | timestamptz |  |  |
+| `deleted_at` | timestamptz |  |  |
+| `is_deleted` | boolean | NOT NULL | false |
+| `updated_by` | uuid |  |  |
+| `deleted_by` | uuid |  |  |
 
 **Vikwazo:**
 
 - **PK** `feeding_logs_pkey` - PRIMARY KEY (log_id)
 - **FK** `feeding_logs_cycle_id_fkey` - FOREIGN KEY (cycle_id) REFERENCES cycles(cycle_id) ON DELETE CASCADE
+- **FK** `feeding_logs_deleted_by_fkey` - FOREIGN KEY (deleted_by) REFERENCES users(user_id)
 - **FK** `feeding_logs_recorded_by_user_id_fkey` - FOREIGN KEY (recorded_by_user_id) REFERENCES users(user_id)
+- **FK** `feeding_logs_updated_by_fkey` - FOREIGN KEY (updated_by) REFERENCES users(user_id)
+
+**Index:**
+
+- `idx_feeding_logs_cycle`
 
 ### `feed_stock_movements`
 
@@ -361,14 +386,26 @@
 | `reference_purchase_id` | integer |  |  |
 | `reference_feeding_log_id` | integer |  |  |
 | `moved_at` | timestamptz | NOT NULL | now() |
+| `created_at` | timestamptz | NOT NULL | now() |
+| `updated_at` | timestamptz |  |  |
+| `deleted_at` | timestamptz |  |  |
+| `is_deleted` | boolean | NOT NULL | false |
+| `updated_by` | uuid |  |  |
+| `deleted_by` | uuid |  |  |
 
 **Vikwazo:**
 
 - **PK** `feed_stock_movements_pkey` - PRIMARY KEY (movement_id)
+- **FK** `feed_stock_movements_deleted_by_fkey` - FOREIGN KEY (deleted_by) REFERENCES users(user_id)
 - **FK** `feed_stock_movements_farm_id_fkey` - FOREIGN KEY (farm_id) REFERENCES farms(farm_id) ON DELETE CASCADE
 - **FK** `feed_stock_movements_reference_feeding_log_id_fkey` - FOREIGN KEY (reference_feeding_log_id) REFERENCES feeding_logs(log_id)
 - **FK** `feed_stock_movements_reference_purchase_id_fkey` - FOREIGN KEY (reference_purchase_id) REFERENCES feed_purchases(purchase_id)
+- **FK** `feed_stock_movements_updated_by_fkey` - FOREIGN KEY (updated_by) REFERENCES users(user_id)
 - **CHECK** `feed_stock_movements_direction_check` - CHECK (((direction)::text = ANY ((ARRAY['IN'::character varying, 'OUT'::character varying])::text[])))
+
+**Index:**
+
+- `idx_feed_stock_movements_farm`
 
 ---
 
