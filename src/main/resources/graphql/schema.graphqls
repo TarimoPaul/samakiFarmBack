@@ -1,11 +1,27 @@
 type Query {
     productionUnits: [ProductionUnit!]!
     cycles(status: String): [Cycle!]!
+
+    # ---------- Feed ----------
+    feedPurchases: [FeedPurchase!]!
+    feedingLogs(cycleId: Int): [FeedingLog!]!
+    feedStockMovements: [FeedStockMovement!]!
+    feedStockBalance: Float!
+
+    # ---------- Water Quality ----------
+    waterQualityLogs(unitId: Int): [WaterQualityLog!]!
 }
 
 type Mutation {
     createProductionUnit(input: CreateProductionUnitInput!): ProductionUnit!
     createCycle(input: CreateCycleInput!): Cycle!
+
+    # ---------- Feed ----------
+    recordFeedPurchase(input: RecordFeedPurchaseInput!): FeedPurchase!
+    logFeeding(input: LogFeedingInput!): FeedingLog!
+
+    # ---------- Water Quality ----------
+    logWaterQuality(input: LogWaterQualityInput!): WaterQualityLog!
 }
 
 type ProductionUnit {
@@ -44,5 +60,81 @@ input CreateCycleInput {
     survivalRateEstimate: Float
 }
 
-# Moduli zilizobaki (Feed, WaterQuality, DailyTasks, Finance) zitaongezwa
-# hapa kwa muundo uleule - angalia SRS §8 kwa orodha kamili.
+# ============================================================
+# Feed — ununuzi, ulishaji, na leja ya stoo
+# ============================================================
+
+type FeedPurchase {
+    purchaseId: ID!
+    purchaseDate: String!
+    feedType: String!
+    quantityKg: Float!
+    unitCost: Float!
+    # Inakokotolewa na database (GENERATED ALWAYS) - si sehemu ya input
+    totalCost: Float
+    supplier: String
+}
+
+input RecordFeedPurchaseInput {
+    purchaseDate: String!
+    feedType: String!
+    quantityKg: Float!
+    unitCost: Float!
+    supplier: String
+}
+
+type FeedingLog {
+    logId: ID!
+    cycle: Cycle!
+    logDate: String!
+    feedType: String
+    quantityKg: Float!
+    recordedByName: String
+}
+
+input LogFeedingInput {
+    cycleId: Int!
+    # Ikiachwa wazi, inatumia leo
+    logDate: String
+    feedType: String
+    quantityKg: Float!
+}
+
+# Leja inayozalishwa na mfumo: kununua -> IN, kulisha -> OUT.
+# Haiandikwi moja kwa moja na mteja (angalia FeedService).
+type FeedStockMovement {
+    movementId: ID!
+    direction: String!
+    quantityKg: Float!
+    referencePurchaseId: Int
+    referenceFeedingLogId: Int
+    movedAt: String!
+}
+
+# ============================================================
+# Water Quality — vipimo vya maji kwa kila tanki/bwawa
+# ============================================================
+
+type WaterQualityLog {
+    logId: ID!
+    unit: ProductionUnit!
+    logDate: String!
+    ph: Float
+    temperature: Float
+    oxygen: Float
+    notes: String
+    recordedByName: String
+}
+
+input LogWaterQualityInput {
+    unitId: Int!
+    # Ikiachwa wazi, inatumia leo
+    logDate: String
+    ph: Float
+    temperature: Float
+    oxygen: Float
+    notes: String
+}
+
+# Moduli zilizobaki (DailyTasks, Finance) zitaongezwa hapa kwa
+# muundo uleule - angalia SRS §8 kwa orodha kamili.
