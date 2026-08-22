@@ -6,9 +6,6 @@ OWNER,manage_units
 OWNER,mark_task_done
 OWNER,view_finance
 OWNER,manage_users
-OWNER,log_feeding
-OWNER,manage_feed_stock
-OWNER,log_water_quality
 
 # FARM_MANAGER - anaendesha uzalishaji na fedha, hasimamii watumiaji
 FARM_MANAGER,view_dashboard
@@ -16,16 +13,10 @@ FARM_MANAGER,edit_cycle
 FARM_MANAGER,manage_units
 FARM_MANAGER,mark_task_done
 FARM_MANAGER,view_finance
-FARM_MANAGER,log_feeding
-FARM_MANAGER,manage_feed_stock
-FARM_MANAGER,log_water_quality
 
-# WORKER - kazi za kila siku pekee (kulisha/kupima maji ni kazi za shambani,
-# lakini kununua chakula si kazi yake)
+# WORKER - kazi za kila siku pekee
 WORKER,view_dashboard
 WORKER,mark_task_done
-WORKER,log_feeding
-WORKER,log_water_quality
 
 # VIEWER - ripoti tu, hana uwezo wa kubadilisha chochote
 VIEWER,view_dashboard

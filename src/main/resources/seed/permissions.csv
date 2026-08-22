@@ -4,9 +4,6 @@ view_dashboard,FARM,REPORTING,Kuona dashibodi/ripoti
 edit_cycle,FARM,PRODUCTION,Kuongeza/kuhariri mizunguko ya uzalishaji
 manage_units,FARM,PRODUCTION,Kuongeza/kuhariri matanki/mabwawa
 mark_task_done,FARM,TASKS,Kuweka kazi ya kila siku kuwa imekamilika
-log_feeding,FARM,FEED,Kurekodi ulishaji wa kila siku
-manage_feed_stock,FARM,FEED,Kununua chakula na kusimamia stoo
-log_water_quality,FARM,WATER,Kurekodi vipimo vya ubora wa maji
 
 # ==================== FINANCE MODULE ====================
 view_finance,FINANCE,REPORTING,Kuona gharama/mauzo/faida
