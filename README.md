@@ -1,46 +1,97 @@
 # Backend — Spring Boot (Java) + GraphQL + REST
 
-## Muundo wa API (kama ilivyoamuliwa)
-- **REST** (`/api/**`) — Auth, User Management, Roles & Permissions PEKEE
+## Muundo wa API
+- **REST** (`/api/**`) — Auth, User Management, Roles & Permissions, Farms
 - **GraphQL** (`/graphql`) — kila kitu kingine: Production Units, Cycles (na baadaye Feed, Water Quality, Daily Tasks, Finance)
 - RBAC moja (`PermissionChecker`) inatumika NA REST NA GraphQL — chanzo kimoja cha ukweli, si logic mbili tofauti
 
-## Kilichokamilika
-- Schema (Flyway `V1__init_schema.sql` — ile ile ya awali, sasa kwa muundo wa Flyway)
-- Entities za JPA: User (+isRoot), Role, Permission (+module/groupName), Farm, FarmUser, ProductionUnit, Species, Cycle, DailyTask
-- Security: JWT filter + PermissionChecker (RBAC ya pamoja) + @PreAuthorize (REST) — angalia "RBAC" hapa chini
-- REST: `/api/auth/login`, `/api/users` (create), `/api/roles` (create/list, list/update permissions)
-- GraphQL: `productionUnits`, `cycles` (queries) + `createProductionUnit`, `createCycle` (mutations) — `createCycle` inaonyesha FR-3.2 (tarehe ya mavuno kiotomatiki) na FR-4.1 (daily_tasks kiotomatiki)
+Code imepangwa kwa **module** (si kwa tabaka): kila dhana ina folder yake yenye `entity/`, `dto/`, `repository/`, `services/`, na `controller/` au `graphql/`. Module mpya ni kuongeza folder tu.
 
-## RBAC (imesasishwa kufuata muundo wa mradi wa Lsms)
-- **JWT haibebi tena ruhusa.** Inabeba tu `userId` + `isRoot` (+ `farmId`/`roleId`/`roleName` kwa muktadha wa UI). Kila request, `JwtAuthFilter` inasoma role/ruhusa **fresh kutoka DB** (cache: dakika 15 kwa mtumiaji wa kawaida, dakika 5 kwa ROOT) — ukibadilisha ruhusa za role, watumiaji wanapata mabadiliko papo hapo bila kulazimika ku-login tena.
-- **ROOT ni flag (`users.is_root`), si jina la role.** "OWNER" sasa ni role ya kawaida inayopata ufikiaji wake kupitia ruhusa za wazi (angalia `seed/role_permissions.csv`), si bypass ya hardcoded. Mtumiaji wa ROOT (hana farm/role) anatengenezwa na `RbacDataInitializer` kutoka `app.root.*` properties (angalia `application.yml`).
-- **Permissions zinapakiwa kutoka `seed/permissions.csv`** (idempotent) na **role-permission mapping kutoka `seed/role_permissions.csv` MARA MOJA TU** kwa role isiyo na ruhusa yoyote bado — role iliyoshabadilishwa na admin haiguswi tena kwenye restart (angalia `RbacDataInitializer`).
-- REST controllers zinatumia `@PreAuthorize("hasAuthority('...')")` (angalia `MethodSecurityConfig`/`CustomPermissionEvaluator`); GraphQL resolvers zinaendelea kutumia `PermissionChecker.require(...)` (chanzo kimoja cha ukweli kati ya API mbili).
-- Roles 4 za msingi (OWNER/FARM_MANAGER/WORKER/VIEWER) zinabaki hardcoded kwenye `V1__init_schema.sql` kwa sababu ya bootstrap ya shamba jipya — tofauti na Lsms (ambapo ROOT-pekee anaunda roles zote kupitia UI), lakini muundo wa ruhusa/caching/ROOT-bypass ni ule ule.
+## Mfumo wa umiliki na akaunti
 
-## MUHIMU — Lombok + JDK 23 kwenye Maven (fix iliyofanywa)
-Lombok 1.18.34 (iliyosimamiwa na spring-boot-dependencies 3.3.2) ilikuwa ikishindwa **kimya kimya** kutengeneza getters/setters wakati wa `mvn compile` kwenye JDK 23 — makosa ya "cannot find symbol" kila mahali bila kosa lolote la Lombok lenyewe. Chanzo: "auto-discovery" ya annotation processor kutoka kwenye `-classpath` ndefu (~60 jars) kwenye njia yenye nafasi (`D:\KAMPUNI PROJECT\...`) ilishindwa. Suluhisho (tayari kwenye `pom.xml`): `<lombok.version>1.18.42</lombok.version>` + `<annotationProcessorPaths>` ya wazi kwenye maven-compiler-plugin. `mvn clean package` imejaribiwa na inafanya kazi.
+Mfumo ni wa **kampuni moja** yenye mashamba yanayoweza kuwa zaidi ya moja.
+
+- **`users`** = mtu (utambulisho + hali ya akaunti). **`farm_users`** = uanachama (`user_id` + `farm_id` + `role_id`). Mtu anaweza kuwa kwenye mashamba mengi, na role yake ni ya kila shamba — si ya mtu.
+- **`users.status`** ni mzunguko wa maisha: `PENDING_APPROVAL` → `ACTIVE` → `DISABLED`. Ni tofauti kabisa na `is_deleted` (ambayo ni kufuta rekodi pekee).
+- **Kujisajili** (`POST /api/auth/register`) kunaunda mtu `PENDING_APPROVAL` **pekee** — hakuna shamba, hakuna role, hakuna token.
+- **Kuidhinisha** (`POST /api/users/{id}/approve`) kunahitaji ruhusa ya `approve_users` na kunabadilisha hali kuwa `ACTIVE`. **Hakutoi role.**
+- **Kupewa uanachama** (`POST /api/users/{id}/memberships`) ni hatua tofauti kabisa (`manage_users`). Mtu `ACTIVE` asiye na uanachama anaingia na kuona ukurasa mtupu — hii ni hali halali.
+
+### Mkataba wa login
+
+Password inathibitishwa **KWANZA**, kisha hali ya akaunti inaangaliwa. Mpangilio huu ndio unaozuia mtu kugundua ni namba zipi zilizosajiliwa.
+
+| Hali | HTTP | `errorCode` |
+|---|---|---|
+| Password batili / mtu hayupo / amefutwa | `401` | `INVALID_CREDENTIALS` |
+| Password sahihi + `PENDING_APPROVAL` | `403` | `PENDING_APPROVAL` |
+| Password sahihi + `DISABLED` | `403` | `ACCOUNT_DISABLED` |
+| Password sahihi + `ACTIVE` | `200` | — (token + `mustChangePassword`) |
+
+Frontend inatawi kwa **`errorCode`**, si kwa ujumbe wa Kiswahili.
+
+## RBAC
+
+- **JWT haibebi ruhusa.** Inabeba `userId` + `isRoot` (+ `farmId`/`roleId`/`roleName` kwa muktadha wa UI). Kila request, `JwtAuthFilter` inasoma hali ya akaunti na ruhusa **fresh kutoka DB** (cache: dakika 15 kwa mtumiaji, dakika 5 kwa ROOT). Ukibadilisha role, kuzuia, au kufuta mtu — inaanza kufanya kazi papo hapo bila kusubiri token iishe muda.
+- **ROOT ni flag (`users.is_root`), si jina la role.** Hana uanachama wowote. Anatengenezwa na `RbacSeedService` kutoka environment variables pekee, na analazimika kubadilisha password mara ya kwanza.
+- **Idhini inadhibitiwa na RUHUSA (`approve_users`), si jina la role** — role yoyote iliyopewa ruhusa hiyo inaweza kuidhinisha.
+- Permissions zinapakiwa kutoka `seed/permissions.csv` (idempotent). Role↔permission zinapakiwa kutoka `seed/role_permissions.csv` **mara moja tu kwa role isiyo na ruhusa yoyote** — role iliyobadilishwa na admin haiguswi tena kwenye restart. Kwa hiyo **ruhusa mpya kwa role zilizopo lazima ziongezwe kwa migration**, si kwa CSV pekee (angalia `V7__auth_permissions.sql`).
+
+## Kuendesha
+
+Mahitaji: JDK 17+, Maven, PostgreSQL.
+
+**Environment variables za LAZIMA** — app haitaanza bila hizi (angalia `.env.example`):
+
+| Variable | Maana |
+|---|---|
+| `DB_PASSWORD` | password ya PostgreSQL |
+| `JWT_SECRET` | siri ndefu ya nasibu (angalau herufi 32) |
+
+Za hiari lakini muhimu: `ROOT_PHONE`, `ROOT_PASSWORD`, `ROOT_EMAIL` — zisipowekwa, **ROOT hatengenezwi** (app inaanza, lakini kwa onyo kwenye logs).
+
+```powershell
+$env:DB_PASSWORD = "..."
+$env:JWT_SECRET  = "..."
+$env:ROOT_PHONE  = "0000000000"
+$env:ROOT_PASSWORD = "..."
+mvn spring-boot:run
+```
+
+Flyway inaendesha migrations kiotomatiki. GraphiQL: `http://localhost:8082/graphiql`.
+
+## Documents za schema
+
+`Data_Dictionary_Majedwali.md` na `ERD_Muundo_wa_Database.mermaid` **hazihaririwi kwa mkono** — zinazalishwa kutoka database halisi:
+
+```powershell
+$env:PGPASSWORD = "..."; ./tools/generate-docs.ps1
+```
+
+Ziendeshe baada ya kila migration. Hii ndiyo inayozuia drift kama ile ya awali ("Data Dictionary inasema 17, ERD inasema 20").
+
+## MUHIMU — Lombok + JDK ya kisasa kwenye Maven
+
+Lombok 1.18.34 (iliyosimamiwa na spring-boot-dependencies 3.3.2) ilikuwa ikishindwa **kimya kimya** kutengeneza getters/setters wakati wa `mvn compile` kwenye JDK 23 — makosa ya "cannot find symbol" kila mahali bila kosa lolote la Lombok lenyewe. Chanzo: "auto-discovery" ya annotation processor kutoka kwenye `-classpath` ndefu kwenye njia yenye nafasi (`D:\KAMPUNI PROJECT\...`). Suluhisho (tayari kwenye `pom.xml`): `<lombok.version>1.18.42</lombok.version>` + `<annotationProcessorPaths>` ya wazi.
 
 ## Bado Haijaandikwa
-- Entities/resolvers za: FeedPurchase, FeedingLog, FeedStockMovement, WaterQualityLog, TaskCompletion, Reminder, Cost, Customer, Sale
-- Reminders scheduler (Spring `@Scheduled` + AWS Pinpoint/SNS + Lambda Africa's Talking)
+
+- Entities/resolvers za: FeedPurchase, FeedingLog, FeedStockMovement, WaterQualityLog, TaskCompletion, Reminder, Cost, Customer, Sale, Asset
+- API za `species` na kubadilisha jina/mahali pa shamba
+- Kubadilisha shamba (farm switching) — muundo unaruhusu uanachama mwingi, lakini token inabeba shamba MOJA (angalia `// TODO: farm switching`)
+- Reminders scheduler (Spring `@Scheduled`)
 - Angular frontend (haijaguswa)
 
-## MUHIMU — Kikwazo cha Ukaguzi
+Angalia `GAP_ANALYSIS.md` kwa uchambuzi kamili wa kilichopo dhidi ya kinachotakiwa.
 
-**Sikuweza kuendesha `mvn compile` wala kupakua dependencies za Maven** kwenye mazingira haya — mtandao wangu wa bash una orodha ya domains zilizoruhusiwa (npm, pypi, crates.io, github) na **Maven Central HAIPO kwenye orodha hiyo**. Kwa hiyo:
-- Nimehakiki muundo wa juu wa faili (braces/parentheses zina uwiano, majina ya packages/imports yanaonekana sahihi kimantiki) — TU, si ukaguzi kamili wa Java compiler.
-- **HAIJAJARIBIWA kuchemka (compile) wala kuendesha.** Kabla ya kuitumia, pakua kwenye kompyuta yako yenye Maven+JDK 17, endesha `mvn clean install`, rekebisha makosa yoyote ya kuchemka yatakayojitokeza (ni ya kawaida kwa code isiyojaribiwa bado).
+## Kabla ya production
 
-## Jinsi ya Kujaribu (baada ya kupakua Maven/JDK 17 kwenye kompyuta yako)
-
-1. Tengeneza database: `createdb samaki_db`
-2. Weka environment variables: `DB_HOST`, `DB_USER`, `DB_PASSWORD`, `JWT_SECRET` (au badilisha `application.yml` moja kwa moja kwa majaribio ya local)
-3. `mvn spring-boot:run`
-4. Flyway itaendesha `V1__init_schema.sql` kiotomatiki wakati wa kuanza
-5. Fungua `http://localhost:8080/graphiql` kujaribu GraphQL queries kwa mkono
-6. Jaribu REST: `curl -X POST http://localhost:8080/api/auth/login -d '{"phone":"...","password":"..."}' -H "Content-Type: application/json"`
+- Zima GraphiQL (`spring.graphql.graphiql.enabled: false`)
+- Badilisha `LoggingSmsSender` (stub inayoandika kwenye logs) na provider halisi — **kwa sasa OTP HAITUMWI kweli**
+- Ongeza `spring-boot-starter-actuator` au ondoa ruhusa ya `/actuator/health` kwenye `SecurityConfig`
+- Rate limiting ya sasa iko kwenye kumbukumbu ya instance moja — kwa instance nyingi inahitajika Redis au sawa
+- Hakikisha load balancer inaandika upya `X-Forwarded-For` (angalia `ClientIp`)
 
 ## AWS Deployment (baadaye)
-Package kama Docker image (JAR ya Spring Boot + JRE 17 base image), deploy kwenye ECS Fargate — RDS PostgreSQL kama database, sawa na mpango wa awali wa AWS.
+
+Package kama Docker image (JAR ya Spring Boot + JRE 17 base image), deploy kwenye ECS Fargate — RDS PostgreSQL kama database.

@@ -1,0 +1,257 @@
+%% ERD ya Mfumo wa Ufugaji wa Samaki
+%% IMEZALISHWA KIOTOMATIKI kutoka database halisi - USIIHARIRI KWA MKONO.
+%% Izalishe upya: ./tools/generate-docs.ps1   (2026-08-22, jedwali 21)
+erDiagram
+    farms ||--o{ assets : "farm_id"
+    cycles ||--o{ costs : "cycle_id"
+    species ||--o{ cycles : "species_id"
+    production_units ||--o{ cycles : "unit_id"
+    roles ||--o{ daily_tasks : "assigned_role_id"
+    cycles ||--o{ daily_tasks : "cycle_id"
+    farms ||--o{ farm_users : "farm_id"
+    roles ||--o{ farm_users : "role_id"
+    users ||--o{ farm_users : "user_id"
+    users ||--o{ farms : "owner_user_id"
+    farms ||--o{ feed_purchases : "farm_id"
+    farms ||--o{ feed_stock_movements : "farm_id"
+    feeding_logs ||--o{ feed_stock_movements : "reference_feeding_log_id"
+    feed_purchases ||--o{ feed_stock_movements : "reference_purchase_id"
+    cycles ||--o{ feeding_logs : "cycle_id"
+    users ||--o{ feeding_logs : "recorded_by_user_id"
+    users ||--o{ password_reset_otps : "user_id"
+    farms ||--o{ production_units : "farm_id"
+    daily_tasks ||--o{ reminders : "task_id"
+    permissions ||--o{ role_permissions : "permission_id"
+    roles ||--o{ role_permissions : "role_id"
+    customers ||--o{ sales : "customer_id"
+    cycles ||--o{ sales : "cycle_id"
+    users ||--o{ task_completions : "completed_by_user_id"
+    daily_tasks ||--o{ task_completions : "task_id"
+    users ||--o{ water_quality_logs : "recorded_by_user_id"
+    production_units ||--o{ water_quality_logs : "unit_id"
+
+    assets {
+        integer asset_id PK
+        integer farm_id FK
+        varchar_150_ name
+        varchar_80_ category
+        date purchase_date
+        numeric_14_2_ value
+        varchar_30_ status
+    }
+    costs {
+        integer cost_id PK
+        integer cycle_id FK
+        varchar_50_ category
+        text description
+        numeric_14_2_ amount
+        date cost_date
+    }
+    customers {
+        integer customer_id PK
+        varchar_150_ name
+        varchar_20_ phone
+        varchar_30_ type
+    }
+    cycles {
+        integer cycle_id PK
+        integer unit_id FK
+        integer species_id FK
+        date stocking_date
+        integer fingerlings_count
+        numeric_4_2_ survival_rate_estimate
+        date expected_harvest_date
+        date actual_harvest_date
+        varchar_20_ status
+        timestamptz created_at
+        timestamptz updated_at
+        timestamptz deleted_at
+        boolean is_deleted
+        uuid updated_by FK
+        uuid deleted_by FK
+    }
+    daily_tasks {
+        integer task_id PK
+        integer cycle_id FK
+        varchar_50_ task_type
+        time scheduled_time
+        varchar_20_ frequency
+        integer assigned_role_id FK
+        timestamptz created_at
+        timestamptz updated_at
+        timestamptz deleted_at
+        boolean is_deleted
+        uuid updated_by FK
+        uuid deleted_by FK
+    }
+    farm_users {
+        uuid user_id PK
+        integer farm_id PK
+        integer role_id FK
+        timestamptz created_at
+        timestamptz updated_at
+        timestamptz deleted_at
+        boolean is_deleted
+        uuid updated_by FK
+        uuid deleted_by FK
+    }
+    farms {
+        integer farm_id PK
+        varchar_150_ name
+        varchar_200_ location
+        uuid owner_user_id FK
+        timestamptz created_at
+        timestamptz updated_at
+        timestamptz deleted_at
+        boolean is_deleted
+        uuid updated_by FK
+        uuid deleted_by FK
+    }
+    feed_purchases {
+        integer purchase_id PK
+        integer farm_id FK
+        date purchase_date
+        varchar_80_ feed_type
+        numeric_10_2_ quantity_kg
+        numeric_12_2_ unit_cost
+        numeric_14_2_ total_cost
+        varchar_150_ supplier
+    }
+    feed_stock_movements {
+        integer movement_id PK
+        integer farm_id FK
+        varchar_3_ direction
+        numeric_10_2_ quantity_kg
+        integer reference_purchase_id FK
+        integer reference_feeding_log_id FK
+        timestamptz moved_at
+    }
+    feeding_logs {
+        integer log_id PK
+        integer cycle_id FK
+        date log_date
+        varchar_80_ feed_type
+        numeric_8_2_ quantity_kg
+        uuid recorded_by_user_id FK
+    }
+    password_reset_otps {
+        bigint otp_id PK
+        uuid user_id FK
+        text code_hash
+        timestamptz expires_at
+        integer attempts
+        timestamptz used_at
+        timestamptz created_at
+        timestamptz updated_at
+        timestamptz deleted_at
+        boolean is_deleted
+        uuid updated_by FK
+        uuid deleted_by FK
+    }
+    permissions {
+        integer permission_id PK
+        varchar_80_ code
+        varchar_50_ module
+        varchar_50_ group_name
+        text description
+        timestamptz created_at
+        timestamptz updated_at
+        timestamptz deleted_at
+        boolean is_deleted
+        uuid updated_by FK
+        uuid deleted_by FK
+    }
+    production_units {
+        integer unit_id PK
+        integer farm_id FK
+        varchar_30_ code
+        varchar_20_ type
+        numeric_10_2_ size_m3
+        varchar_100_ water_source
+        varchar_20_ status
+        timestamptz created_at
+        timestamptz updated_at
+        timestamptz deleted_at
+        boolean is_deleted
+        uuid updated_by FK
+        uuid deleted_by FK
+    }
+    reminders {
+        integer reminder_id PK
+        integer task_id FK
+        varchar_10_ channel
+        timestamptz send_time
+        varchar_20_ status
+    }
+    role_permissions {
+        integer role_id PK
+        integer permission_id PK
+    }
+    roles {
+        integer role_id PK
+        varchar_50_ name
+        text description
+        timestamptz created_at
+        timestamptz updated_at
+        timestamptz deleted_at
+        boolean is_deleted
+        uuid updated_by FK
+        uuid deleted_by FK
+    }
+    sales {
+        integer sale_id PK
+        integer cycle_id FK
+        integer customer_id FK
+        date sale_date
+        numeric_10_2_ kg
+        numeric_12_2_ price_per_kg
+        numeric_14_2_ total_amount
+    }
+    species {
+        integer species_id PK
+        varchar_80_ name
+        numeric_4_1_ growth_months_avg
+        numeric_6_2_ avg_harvest_weight_kg
+        timestamptz created_at
+        timestamptz updated_at
+        timestamptz deleted_at
+        boolean is_deleted
+        uuid updated_by FK
+        uuid deleted_by FK
+    }
+    task_completions {
+        integer completion_id PK
+        integer task_id FK
+        date completion_date
+        uuid completed_by_user_id FK
+        timestamptz completed_at
+        varchar_20_ status
+        text notes
+    }
+    users {
+        uuid user_id PK
+        varchar_150_ name
+        varchar_20_ phone
+        varchar_150_ email
+        text password_hash
+        text push_token
+        varchar_20_ status
+        boolean is_root
+        timestamptz created_at
+        timestamptz updated_at
+        timestamptz deleted_at
+        boolean is_deleted
+        uuid updated_by FK
+        uuid deleted_by FK
+        boolean must_change_password
+    }
+    water_quality_logs {
+        integer log_id PK
+        integer unit_id FK
+        date log_date
+        numeric_3_1_ ph
+        numeric_4_1_ temperature
+        numeric_4_1_ oxygen
+        text notes
+        uuid recorded_by_user_id FK
+    }
