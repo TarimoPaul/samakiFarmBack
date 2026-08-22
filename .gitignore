@@ -1,0 +1,16 @@
+# Maven
+target/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Local overrides / siri - HAZIPASWI kamwe kuingia kwenye repo
+application-local.yml
+application-local.properties
+.env
