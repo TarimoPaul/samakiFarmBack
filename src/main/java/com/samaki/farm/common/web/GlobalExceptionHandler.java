@@ -16,6 +16,8 @@ import org.springframework.security.authorization.AuthorizationDeniedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.servlet.NoHandlerFoundException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.util.stream.Collectors;
 
@@ -146,6 +148,24 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiResponse<Void>> handleDataIntegrity(DataIntegrityViolationException ex) {
         return ResponseEntity.status(HttpStatus.CONFLICT)
                 .body(ApiResponse.error(DATA_INTEGRITY_MESSAGE, ErrorCodes.CONFLICT));
+    }
+
+    /**
+     * Njia isiyokuwepo -> 404, si 500.
+     *
+     * Bila handler hii zilikuwa zinaangukia handleGeneric hapa chini
+     * (Exception.class), hivyo URL yoyote iliyoandikwa vibaya ilirudisha
+     * "Hitilafu ya ndani ya mfumo" - ikimwambia mteja kwamba server
+     * imeharibika wakati kwa kweli YEYE ndiye ameomba kitu kisichokuwepo,
+     * na ikijaza logs kwa ERROR zisizo za kweli.
+     *
+     * Ilionekana wakati wa kuthibitisha D-5: /actuator/health (actuator
+     * haipo kwenye pom.xml) ilikuwa inarudisha 500 kwa mwenye token.
+     */
+    @ExceptionHandler({NoResourceFoundException.class, NoHandlerFoundException.class})
+    public ResponseEntity<ApiResponse<Void>> handleNotFound(Exception ex) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(ApiResponse.error("Njia hii haipo."));
     }
 
     @ExceptionHandler(Exception.class)
