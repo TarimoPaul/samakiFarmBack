@@ -4,9 +4,11 @@ import com.samaki.farm.auth.dto.ChangePasswordRequest;
 import com.samaki.farm.auth.dto.ForgotPasswordRequest;
 import com.samaki.farm.auth.dto.LoginRequest;
 import com.samaki.farm.auth.dto.LoginResponse;
+import com.samaki.farm.auth.dto.MeResponse;
 import com.samaki.farm.auth.dto.RegisterRequest;
 import com.samaki.farm.auth.dto.RegistrationResponse;
 import com.samaki.farm.auth.dto.ResetPasswordRequest;
+import com.samaki.farm.auth.security.AuthenticatedUser;
 import com.samaki.farm.auth.security.JwtAuthFilter;
 import com.samaki.farm.auth.security.JwtUtil;
 import com.samaki.farm.common.exception.ConflictException;
@@ -16,6 +18,8 @@ import com.samaki.farm.common.exception.UnauthorizedException;
 import com.samaki.farm.common.ratelimit.RateLimiter;
 import com.samaki.farm.farmuser.entity.FarmUser;
 import com.samaki.farm.farmuser.repository.FarmUserRepository;
+import com.samaki.farm.rbac.entity.Permission;
+import com.samaki.farm.rbac.repository.PermissionRepository;
 import com.samaki.farm.user.dto.UserSummary;
 import com.samaki.farm.user.entity.User;
 import com.samaki.farm.user.entity.UserStatus;
@@ -53,16 +57,19 @@ public class AuthService {
 
     private final UserRepository userRepository;
     private final FarmUserRepository farmUserRepository;
+    private final PermissionRepository permissionRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
     private final PasswordResetService passwordResetService;
     private final RateLimiter rateLimiter;
 
     public AuthService(UserRepository userRepository, FarmUserRepository farmUserRepository,
+                        PermissionRepository permissionRepository,
                         PasswordEncoder passwordEncoder, JwtUtil jwtUtil,
                         PasswordResetService passwordResetService, RateLimiter rateLimiter) {
         this.userRepository = userRepository;
         this.farmUserRepository = farmUserRepository;
+        this.permissionRepository = permissionRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtUtil = jwtUtil;
         this.passwordResetService = passwordResetService;
@@ -210,6 +217,35 @@ public class AuthService {
                             ? ErrorCodes.PENDING_APPROVAL : ErrorCodes.ACCOUNT_DISABLED);
         }
         return buildLoginResponse(user);
+    }
+
+    /**
+     * Mtumiaji wa sasa PAMOJA na misimbo ya ruhusa zake.
+     *
+     * Ruhusa HAZITOKI kwenye JWT (haibebi orodha yoyote, kwa makusudi) -
+     * zinatoka kwenye principal ambayo JwtAuthFilter huijaza kutoka DB.
+     * Ndiyo maana mabadiliko ya role yanaonekana bila mtu kulazimika
+     * ku-login upya: RoleService.updateRolePermissions inafuta cache za
+     * watumiaji wote, hivyo ombi la /me linalofuata linasoma upya.
+     *
+     * ROOT ni tofauti: principal yake haina orodha (ufikiaji wake ni flag,
+     * si uhusiano), hivyo inapanuliwa hapa kuwa ruhusa ZOTE zilizopo -
+     * ndivyo JwtAuthFilter.getRootAuthorities() nayo inavyofanya, hivyo
+     * mteja anaona hasa kile anachoruhusiwa.
+     */
+    @Transactional(readOnly = true)
+    public MeResponse describeCurrentUser(AuthenticatedUser principal) {
+        User user = userRepository.findByUserId(principal.getUserId())
+                .orElseThrow(() -> new UnauthorizedException(
+                        "Akaunti haipatikani.", ErrorCodes.UNAUTHENTICATED));
+
+        List<String> permissions = principal.isRoot()
+                ? permissionRepository.findAll().stream().map(Permission::getCode).sorted().toList()
+                : principal.getPermissions().stream().sorted().toList();
+
+        return new MeResponse(user.getUserId().toString(), user.getName(), user.getPhone(),
+                user.getStatus().name(), principal.getFarmId(), principal.getRoleName(),
+                permissions);
     }
 
     /**

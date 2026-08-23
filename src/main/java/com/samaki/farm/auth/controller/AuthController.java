@@ -4,6 +4,7 @@ import com.samaki.farm.auth.dto.ChangePasswordRequest;
 import com.samaki.farm.auth.dto.ForgotPasswordRequest;
 import com.samaki.farm.auth.dto.LoginRequest;
 import com.samaki.farm.auth.dto.LoginResponse;
+import com.samaki.farm.auth.dto.MeResponse;
 import com.samaki.farm.auth.dto.RegisterRequest;
 import com.samaki.farm.auth.dto.RegistrationResponse;
 import com.samaki.farm.auth.dto.ResetPasswordRequest;
@@ -81,5 +82,22 @@ public class AuthController {
     public ApiResponse<Void> changePassword(@Valid @RequestBody ChangePasswordRequest req) {
         authService.changePassword(permissionChecker.currentUser().getUserId(), req);
         return ApiResponse.ok(null, "Password imebadilishwa.");
+    }
+
+    /**
+     * Mtumiaji wa sasa + RUHUSA zake halisi.
+     *
+     * Login inarudisha JINA la role pekee, lakini UI inahitaji kujua ni
+     * vitufe vipi vya kuonyesha - na ruhusa za role zinaweza kuhaririwa
+     * wakati wowote (PUT /api/roles/{id}/permissions), hivyo jina la role
+     * si chanzo cha ukweli. Endpoint hii ndiyo chanzo hicho.
+     *
+     * Inahitaji token halali (angalia SecurityConfig), lakini HAIZUIWI na
+     * must_change_password: iko chini ya /api/auth/**, hivyo hata skrini
+     * ya kubadilisha password inaweza kuonyesha jina la mtumiaji.
+     */
+    @GetMapping("/me")
+    public ApiResponse<MeResponse> me() {
+        return ApiResponse.ok(authService.describeCurrentUser(permissionChecker.currentUser()));
     }
 }

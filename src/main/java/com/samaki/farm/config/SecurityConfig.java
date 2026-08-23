@@ -72,6 +72,12 @@ public class SecurityConfig {
                 // endpoints nyingine, kubadilisha password kunahitaji token
                 // halali (uthibitisho ni token + password ya sasa, si OTP).
                 .requestMatchers("/api/auth/change-password").authenticated()
+                // Vivyo hivyo /me: inaeleza mtumiaji ALIYEINGIA ni nani na
+                // ana ruhusa zipi, hivyo bila token haina maana yoyote.
+                // Ikiwa hapa, ombi lisilo na token linakatwa kwenye filter
+                // chain likipata 401 UNAUTHENTICATED, badala ya kuingia
+                // ndani ya controller kwanza.
+                .requestMatchers("/api/auth/me").authenticated()
                 .requestMatchers("/api/auth/**").permitAll()
                 .requestMatchers("/actuator/health").permitAll()
                 // /graphql inaingia hapa chini kwenye anyRequest() - yaani
