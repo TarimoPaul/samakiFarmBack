@@ -30,10 +30,53 @@ Password inathibitishwa **KWANZA**, kisha hali ya akaunti inaangaliwa. Mpangilio
 
 Frontend inatawi kwa **`errorCode`**, si kwa ujumbe wa Kiswahili.
 
+### Vizuizi vya akaunti kwenye kila request
+
+Login si mahali pekee hali ya akaunti inapokaguliwa. `JwtAuthFilter` inaikagua **kila request** (REST na GraphQL), hivyo token halali isiyoisha muda inaweza kukataliwa papo hapo:
+
+| Hali ya mwenye token | HTTP | `errorCode` |
+|---|---|---|
+| `DISABLED` | `403` | `ACCOUNT_DISABLED` |
+| `PENDING_APPROVAL` | `403` | `PENDING_APPROVAL` |
+| `must_change_password = true` | `403` | `MUST_CHANGE_PASSWORD` |
+| Amefutwa / hayupo | `401` | — (kama asiye na token) |
+
+`MUST_CHANGE_PASSWORD` **haizuii `/api/auth/**`** — vinginevyo mtu angekwama bila njia ya kujinasua.
+
+Misimbo hii inaandikwa na `JwtAuthFilter` ndani ya filter chain, ambayo **hairudishi ombi kwenye chain** likishakatwa. Kwa hiyo haiwezi kufunikwa na misimbo ya jumla hapa chini — hali ya akaunti inashinda kila wakati.
+
+### Kikao na ruhusa
+
+Misimbo miwili ya jumla, moja kwa kila swali. `errorCode` ni ile ile REST na GraphQL:
+
+| Swali | Hali | HTTP | `errorCode` |
+|---|---|---|---|
+| Umeingia? | Token haipo, imeisha muda, au si sahihi | `401` | `UNAUTHENTICATED` |
+| Unaruhusiwa? | Umeingia, lakini huna ruhusa husika | `403` | `FORBIDDEN` |
+
+- `UNAUTHENTICATED` ni **tofauti na `INVALID_CREDENTIALS`** kimakusudi: huo ni "password mbaya kwenye fomu ya login", huu ni "hakuna kikao — futa token, rudi kwenye login". Kuzichanganya kungefanya token iliyoisha muda ionekane kama password mbaya.
+- Vyanzo viwili vya kila msimbo vinatoa **envelope moja**: `SecurityConfig` (filter chain) na `GlobalExceptionHandler`/`PermissionChecker` (ndani ya ombi).
+- Kwenye GraphQL msimbo uko kwenye `errors[].extensions.errorCode`. `classification` inabaki `UNAUTHORIZED`/`FORBIDDEN` kwa sababu `ErrorType` ya Spring GraphQL haina `UNAUTHENTICATED` — **tawi kwa `errorCode`**, si kwa `classification`.
+- `/graphql` bila token kabisa inakatwa na filter chain, hivyo inarudisha envelope ya kawaida ya `401` badala ya umbo la `errors[]`.
+
+### Kubadilisha password ukiwa umeingia
+
+`POST /api/auth/change-password` — **hakuna OTP/SMS**. Uthibitisho ni token halali + password ya sasa:
+
+```json
+{ "currentPassword": "...", "newPassword": "..." }
+```
+
+- Password ya sasa mbaya → `401 INVALID_CREDENTIALS` (hakuna kinachobadilika)
+- Password mpya sawa na ya sasa → `400` (vinginevyo lazima ya kubadilisha isingekuwa na maana)
+- Ikifanikiwa → `must_change_password` inakuwa `false`, na **token ile ile inaendelea kufanya kazi** (haibebi chochote kuhusu password)
+
+Hii ndiyo njia ya ROOT aliyetengenezwa kutoka environment variable kujinasua — bila kutegemea huduma ya SMS. `/api/auth/reset-password` (OTP) inabaki kwa mtu aliyesahau password yake.
+
 ## RBAC
 
 - **JWT haibebi ruhusa.** Inabeba `userId` + `isRoot` (+ `farmId`/`roleId`/`roleName` kwa muktadha wa UI). Kila request, `JwtAuthFilter` inasoma hali ya akaunti na ruhusa **fresh kutoka DB** (cache: dakika 15 kwa mtumiaji, dakika 5 kwa ROOT). Ukibadilisha role, kuzuia, au kufuta mtu — inaanza kufanya kazi papo hapo bila kusubiri token iishe muda.
-- **ROOT ni flag (`users.is_root`), si jina la role.** Hana uanachama wowote. Anatengenezwa na `RbacSeedService` kutoka environment variables pekee, na analazimika kubadilisha password mara ya kwanza.
+- **ROOT ni flag (`users.is_root`), si jina la role.** Hana uanachama wowote. Anatengenezwa na `RbacSeedService` kutoka environment variables pekee, na **analazimishwa** kubadilisha password mara ya kwanza — si onyo tu: `JwtAuthFilter` inamzuia kila mahali hadi abadilishe. `is_root` yenyewe inasomwa **kutoka DB**, si kutoka claim ya token, hivyo kuiondoa kunafanya kazi papo hapo.
 - **Idhini inadhibitiwa na RUHUSA (`approve_users`), si jina la role** — role yoyote iliyopewa ruhusa hiyo inaweza kuidhinisha.
 - Permissions zinapakiwa kutoka `seed/permissions.csv` (idempotent). Role↔permission zinapakiwa kutoka `seed/role_permissions.csv` **mara moja tu kwa role isiyo na ruhusa yoyote** — role iliyobadilishwa na admin haiguswi tena kwenye restart. Kwa hiyo **ruhusa mpya kwa role zilizopo lazima ziongezwe kwa migration**, si kwa CSV pekee (angalia `V7__auth_permissions.sql`).
 

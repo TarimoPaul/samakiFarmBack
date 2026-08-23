@@ -1,5 +1,8 @@
 package com.samaki.farm.auth.security;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.samaki.farm.common.exception.ErrorCodes;
+import com.samaki.farm.common.web.ApiResponse;
 import com.samaki.farm.farmuser.entity.FarmUser;
 import com.samaki.farm.farmuser.repository.FarmUserRepository;
 import com.samaki.farm.rbac.entity.Permission;
@@ -16,6 +19,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.MediaType;
 import org.springframework.lang.NonNull;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.GrantedAuthority;
@@ -57,10 +61,27 @@ public class JwtAuthFilter extends OncePerRequestFilter {
     private static volatile long rootCacheTimestamp = 0;
     private static final long ROOT_CACHE_TTL_MS = 5 * 60 * 1000; // dakika 5
 
-    // Cache ya kila mtumiaji wa kawaida - inaepusha kusoma DB kwenye kila request
-    private record CachedUser(AuthenticatedUser user, long timestamp) {}
-    private static final ConcurrentHashMap<UUID, CachedUser> userCache = new ConcurrentHashMap<>();
+    /**
+     * Hali ya akaunti inasafiri pamoja na principal kwa sababu vizuizi vya
+     * B8 (DISABLED / PENDING / must_change_password) vinahitaji kujua
+     * SABABU halisi ili kurudisha errorCode sahihi - si "hana ruhusa" tu.
+     *
+     * `status == null` inamaanisha mtu hayupo au amefutwa (soft-delete).
+     */
+    private record Account(AuthenticatedUser principal, UserStatus status, boolean mustChangePassword) {}
+
+    // Cache ya kila mtumiaji - inaepusha kusoma DB kwenye kila request
+    private record CachedAccount(Account account, long timestamp) {}
+    private static final ConcurrentHashMap<UUID, CachedAccount> userCache = new ConcurrentHashMap<>();
     private static final long USER_CACHE_TTL_MS = 15 * 60 * 1000; // dakika 15
+
+    /**
+     * Endpoints za auth zimeachwa nje ya kizuizi cha must_change_password:
+     * /change-password ndiyo njia ya kutoka, na nyingine (login, register,
+     * forgot/reset-password) hazionyeshi data yoyote ya shamba. Bila
+     * ruhusa hii mtu angekwama bila njia ya kujinasua.
+     */
+    private static final String AUTH_PATH_PREFIX = "/api/auth/";
 
     /** Futa cache ya ROOT - ita hii pale permissions/roles zinapobadilika. */
     public static void clearRootCache() {
@@ -87,15 +108,18 @@ public class JwtAuthFilter extends OncePerRequestFilter {
     private final FarmUserRepository farmUserRepository;
     private final PermissionRepository permissionRepository;
     private final RoleRepository roleRepository;
+    private final ObjectMapper objectMapper;
 
     public JwtAuthFilter(JwtUtil jwtUtil, UserRepository userRepository,
                           FarmUserRepository farmUserRepository,
-                          PermissionRepository permissionRepository, RoleRepository roleRepository) {
+                          PermissionRepository permissionRepository, RoleRepository roleRepository,
+                          ObjectMapper objectMapper) {
         this.jwtUtil = jwtUtil;
         this.userRepository = userRepository;
         this.farmUserRepository = farmUserRepository;
         this.permissionRepository = permissionRepository;
         this.roleRepository = roleRepository;
+        this.objectMapper = objectMapper;
     }
 
     @Override
@@ -103,30 +127,87 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                                      @NonNull HttpServletResponse response,
                                      @NonNull FilterChain filterChain) throws ServletException, IOException {
         String header = request.getHeader("Authorization");
-
-        if (header != null && header.startsWith("Bearer ")) {
-            String token = header.substring(7);
-            try {
-                Claims claims = jwtUtil.parseToken(token);
-                UUID userId = UUID.fromString(claims.getSubject());
-                boolean isRoot = Boolean.TRUE.equals(claims.get("isRoot", Boolean.class));
-
-                AuthenticatedUser authUser = isRoot ? resolveRoot(userId) : resolveRegularUser(userId);
-                Set<GrantedAuthority> authorities = isRoot ? getRootAuthorities() : getUserAuthorities(authUser);
-
-                var authentication = new UsernamePasswordAuthenticationToken(authUser, null, authorities);
-                SecurityContextHolder.getContext().setAuthentication(authentication);
-            } catch (Exception e) {
-                // Token si sahihi/imeisha - endelea bila kuweka authentication;
-                // endpoints zinazohitaji auth zitakataa ombi kwenye SecurityConfig/resolver checks.
-                // Logi (debug) ni muhimu - bila hii, makosa mengine (mfano
-                // LazyInitializationException wakati wa kusoma DB) yangepotea
-                // kimya na kuonekana kama "token si sahihi" tu.
-                logger.debug("JWT auth imeshindikana: {}", e.toString());
-                SecurityContextHolder.clearContext();
-            }
+        if (header == null || !header.startsWith("Bearer ")) {
+            filterChain.doFilter(request, response);
+            return;
         }
+
+        Account account;
+        Set<GrantedAuthority> authorities;
+        try {
+            Claims claims = jwtUtil.parseToken(header.substring(7));
+            UUID userId = UUID.fromString(claims.getSubject());
+
+            account = resolveAccount(userId);
+            // isRoot inatoka DB (si claim ya token): mtu aliyeondolewa uroot
+            // anapoteza ufikiaji papo hapo badala ya kusubiri token iishe.
+            authorities = account.principal().isRoot()
+                    ? getRootAuthorities() : getUserAuthorities(account.principal());
+        } catch (Exception e) {
+            // Token si sahihi/imeisha - endelea bila kuweka authentication;
+            // endpoints zinazohitaji auth zitakataa ombi kwenye SecurityConfig/resolver checks.
+            // Logi (debug) ni muhimu - bila hii, makosa mengine (mfano
+            // LazyInitializationException wakati wa kusoma DB) yangepotea
+            // kimya na kuonekana kama "token si sahihi" tu.
+            logger.debug("JWT auth imeshindikana: {}", e.toString());
+            SecurityContextHolder.clearContext();
+            filterChain.doFilter(request, response);
+            return;
+        }
+
+        // ---------- Vizuizi vya akaunti (B8) ----------
+        // Viko HAPA, si kwenye @PreAuthorize, kwa sababu vinapaswa kufunga
+        // REST NA GraphQL kwa pamoja, na kwa sababu jibu linahitaji
+        // errorCode maalum ambayo AccessDeniedException haina.
+
+        // Mtu hayupo au amefutwa - jibu ni la mtu asiye na token kabisa (401),
+        // si maelezo yanayothibitisha kuwa akaunti iliwahi kuwepo.
+        if (account.status() == null) {
+            SecurityContextHolder.clearContext();
+            filterChain.doFilter(request, response);
+            return;
+        }
+
+        if (account.status() == UserStatus.DISABLED) {
+            deny(response, "Akaunti yako imezuiwa. Wasiliana na msimamizi.",
+                    ErrorCodes.ACCOUNT_DISABLED);
+            return;
+        }
+
+        if (account.status() == UserStatus.PENDING_APPROVAL) {
+            deny(response, "Akaunti yako bado haijaidhinishwa. Subiri msimamizi akuruhusu.",
+                    ErrorCodes.PENDING_APPROVAL);
+            return;
+        }
+
+        if (account.mustChangePassword() && !isAuthPath(request)) {
+            deny(response, "Lazima ubadilishe password kabla ya kuendelea kutumia mfumo.",
+                    ErrorCodes.MUST_CHANGE_PASSWORD);
+            return;
+        }
+
+        var authentication = new UsernamePasswordAuthenticationToken(account.principal(), null, authorities);
+        SecurityContextHolder.getContext().setAuthentication(authentication);
         filterChain.doFilter(request, response);
+    }
+
+    /** Ombi liko kwenye /api/auth/** - halizuiwi na must_change_password. */
+    private boolean isAuthPath(HttpServletRequest request) {
+        String uri = request.getRequestURI();
+        return uri != null && uri.startsWith(AUTH_PATH_PREFIX);
+    }
+
+    /**
+     * Inakataa ombi hapa hapa kwenye filter chain, kabla halijafika
+     * DispatcherServlet - hivyo GlobalExceptionHandler haiihusiki na
+     * envelope lazima iandikwe kwa mkono (kama SecurityConfig inavyofanya
+     * kwa 401/403 za filter-chain level).
+     */
+    private void deny(HttpServletResponse response, String message, String errorCode) throws IOException {
+        SecurityContextHolder.clearContext();
+        response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+        response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+        objectMapper.writeValue(response.getWriter(), ApiResponse.error(message, errorCode));
     }
 
     private AuthenticatedUser resolveRoot(UUID userId) {
@@ -134,15 +215,15 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         return new AuthenticatedUser(userId, null, null, "ROOT", List.of(), true);
     }
 
-    private AuthenticatedUser resolveRegularUser(UUID userId) {
+    private Account resolveAccount(UUID userId) {
         long now = System.currentTimeMillis();
-        CachedUser cached = userCache.get(userId);
+        CachedAccount cached = userCache.get(userId);
         if (cached != null && (now - cached.timestamp()) < USER_CACHE_TTL_MS) {
-            return cached.user();
+            return cached.account();
         }
 
-        AuthenticatedUser fresh = resolveFromDatabase(userId);
-        userCache.put(userId, new CachedUser(fresh, now));
+        Account fresh = loadAccountFromDatabase(userId);
+        userCache.put(userId, new CachedAccount(fresh, now));
         return fresh;
     }
 
@@ -153,15 +234,30 @@ public class JwtAuthFilter extends OncePerRequestFilter {
      * (DISABLED) au kufutwa anapoteza ruhusa ZOTE mara moja, hata kama
      * token yake bado haijaisha muda. UserService inafuta cache yake
      * anapobadilishwa, hivyo athari ni ya papo hapo.
+     *
+     * ROOT naye anasomwa DB hapa (tofauti na awali alipokuwa haguswi
+     * kabisa): bila hivyo `must_change_password` na `status` zake
+     * zisingeweza kulazimishwa - na ndiye hasa mwenye flag hiyo.
      */
-    private AuthenticatedUser resolveFromDatabase(UUID userId) {
+    private Account loadAccountFromDatabase(UUID userId) {
         AuthenticatedUser noAccess = new AuthenticatedUser(userId, null, null, null, List.of(), false);
 
         // findByUserId ni derived query, hivyo @SQLRestriction inatumika:
         // mtu aliyefutwa harudishwi kabisa.
         User user = userRepository.findByUserId(userId).orElse(null);
-        if (user == null || user.getStatus() != UserStatus.ACTIVE) {
-            return noAccess;
+        if (user == null) {
+            return new Account(noAccess, null, false);
+        }
+
+        UserStatus status = user.getStatus();
+        boolean mustChange = user.isMustChangePassword();
+
+        if (Boolean.TRUE.equals(user.getIsRoot())) {
+            return new Account(resolveRoot(userId), status, mustChange);
+        }
+
+        if (status != UserStatus.ACTIVE) {
+            return new Account(noAccess, status, mustChange);
         }
 
         // TODO: farm switching - kwa sasa uanachama wa kwanza pekee
@@ -170,7 +266,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         if (memberships.isEmpty()) {
             // Mtu ameidhinishwa lakini hajapangiwa shamba - anaingia, lakini
             // hana ruhusa yoyote. Hii ni hali HALALI (Part A #4).
-            return noAccess;
+            return new Account(noAccess, status, mustChange);
         }
 
         FarmUser membership = memberships.get(0);
@@ -178,13 +274,15 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         List<String> permissionCodes = (role == null || role.getPermissions() == null) ? List.of()
                 : role.getPermissions().stream().map(Permission::getCode).toList();
 
-        return new AuthenticatedUser(
+        AuthenticatedUser principal = new AuthenticatedUser(
                 userId,
                 membership.getFarm() == null ? null : membership.getFarm().getFarmId(),
                 role == null ? null : role.getRoleId(),
                 role == null ? null : role.getName(),
                 permissionCodes,
                 false);
+
+        return new Account(principal, status, mustChange);
     }
 
     /**

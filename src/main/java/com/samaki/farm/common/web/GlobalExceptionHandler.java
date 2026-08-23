@@ -12,6 +12,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.authorization.AuthorizationDeniedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -41,9 +42,38 @@ public class GlobalExceptionHandler {
 
     private static final Logger logger = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
+    /** Ujumbe wa kurudi pale exception haina wetu - sawa na wa SecurityConfig. */
+    static final String FORBIDDEN_MESSAGE = "Huna ruhusa ya kufikia rasilimali hii.";
+
+    /**
+     * Permission-denied ya kawaida (RBAC) - 403 + ErrorCodes.FORBIDDEN.
+     *
+     * Vyanzo viwili, ujumbe wa aina mbili:
+     *
+     *  - @PreAuthorize inatupa AuthorizationDeniedException yenye ujumbe wa
+     *    ndani wa Spring, "Access Denied" - Kiingereza, hauelezi lolote, na
+     *    ni undani wa framework usiopaswa kumfikia mteja. Unabadilishwa.
+     *  - PermissionChecker.require()/requireSameFarm() zinatupa
+     *    AccessDeniedException yenye ujumbe WETU wa Kiswahili ("Huna ruhusa
+     *    ya 'manage_farms'."). Huo unahifadhiwa - ndio ule ule
+     *    GraphQlExceptionResolver inautuma, hivyo ombi lile lile linaeleza
+     *    kitu kile kile likipita REST au GraphQL.
+     *
+     * HAIGUSI hali ya akaunti: ACCOUNT_DISABLED / PENDING_APPROVAL /
+     * MUST_CHANGE_PASSWORD zinaandikwa na JwtAuthFilter, ambayo inakata ombi
+     * ndani ya filter chain na HAIITI chain.doFilter() - hivyo halifiki
+     * DispatcherServlet wala handler hii. Misimbo hiyo inabaki ikishinda.
+     * (ForbiddenException ni RuntimeException, si AccessDeniedException,
+     * hivyo handleForbidden hapa chini nayo haigongani na hii.)
+     */
     @ExceptionHandler(AccessDeniedException.class)
     public ResponseEntity<ApiResponse<Void>> handleAccessDenied(AccessDeniedException ex) {
-        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ApiResponse.error(ex.getMessage()));
+        String message = (ex instanceof AuthorizationDeniedException) ? null : ex.getMessage();
+        if (message == null || message.isBlank()) {
+            message = FORBIDDEN_MESSAGE;
+        }
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(ApiResponse.error(message, ErrorCodes.FORBIDDEN));
     }
 
     // Hizi mbili ndizo zinazoruhusu service kutupa hitilafu bila kujua HTTP:

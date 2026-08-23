@@ -1,11 +1,13 @@
 package com.samaki.farm.auth.controller;
 
+import com.samaki.farm.auth.dto.ChangePasswordRequest;
 import com.samaki.farm.auth.dto.ForgotPasswordRequest;
 import com.samaki.farm.auth.dto.LoginRequest;
 import com.samaki.farm.auth.dto.LoginResponse;
 import com.samaki.farm.auth.dto.RegisterRequest;
 import com.samaki.farm.auth.dto.RegistrationResponse;
 import com.samaki.farm.auth.dto.ResetPasswordRequest;
+import com.samaki.farm.auth.security.PermissionChecker;
 import com.samaki.farm.auth.services.AuthService;
 import com.samaki.farm.common.web.ApiResponse;
 import com.samaki.farm.common.web.ClientIp;
@@ -24,9 +26,11 @@ import org.springframework.web.bind.annotation.*;
 public class AuthController {
 
     private final AuthService authService;
+    private final PermissionChecker permissionChecker;
 
-    public AuthController(AuthService authService) {
+    public AuthController(AuthService authService, PermissionChecker permissionChecker) {
         this.authService = authService;
+        this.permissionChecker = permissionChecker;
     }
 
     /**
@@ -64,5 +68,18 @@ public class AuthController {
     @PostMapping("/reset-password")
     public ApiResponse<LoginResponse> resetPassword(@Valid @RequestBody ResetPasswordRequest req) {
         return ApiResponse.ok(authService.resetPassword(req));
+    }
+
+    /**
+     * B8 - kubadilisha password ukiwa umeingia (HAKUNA OTP/SMS).
+     *
+     * Hii ndiyo endpoint PEKEE inayoruhusiwa pale `must_change_password`
+     * ni true - angalia JwtAuthFilter. SecurityConfig inaitaka token
+     * halali hapa, tofauti na /api/auth/** nyingine zilizo wazi.
+     */
+    @PostMapping("/change-password")
+    public ApiResponse<Void> changePassword(@Valid @RequestBody ChangePasswordRequest req) {
+        authService.changePassword(permissionChecker.currentUser().getUserId(), req);
+        return ApiResponse.ok(null, "Password imebadilishwa.");
     }
 }

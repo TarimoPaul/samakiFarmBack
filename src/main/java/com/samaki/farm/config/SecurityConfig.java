@@ -2,6 +2,7 @@ package com.samaki.farm.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.samaki.farm.auth.security.JwtAuthFilter;
+import com.samaki.farm.common.exception.ErrorCodes;
 import com.samaki.farm.common.web.ApiResponse;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -66,14 +67,37 @@ public class SecurityConfig {
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
             .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
+                // LAZIMA iwe KABLA ya /api/auth/** hapa chini - matcher ya
+                // kwanza inayolingana ndiyo inayotumika. Tofauti na auth
+                // endpoints nyingine, kubadilisha password kunahitaji token
+                // halali (uthibitisho ni token + password ya sasa, si OTP).
+                .requestMatchers("/api/auth/change-password").authenticated()
                 .requestMatchers("/api/auth/**").permitAll()
                 .requestMatchers("/actuator/health").permitAll()
-                // /graphql yenyewe ni "wazi" hapa - RBAC halisi inafanyika ndani ya
-                // resolvers kupitia PermissionChecker.require(...) (angalia
-                // CycleResolver/ProductionUnitResolver), si kwenye Security layer,
-                // kwa sababu operesheni tofauti za GraphQL kwenye endpoint moja
-                // zinahitaji ruhusa tofauti-tofauti. REST controllers zinatumia
-                // @PreAuthorize (angalia MethodSecurityConfig) badala yake.
+                // /graphql inaingia hapa chini kwenye anyRequest() - yaani
+                // INAHITAJI token halali kwenye filter chain, kama endpoint
+                // nyingine yoyote. (Maoni ya awali hapa yalidai ni "wazi";
+                // hayakuwa yakieleza sheria halisi.)
+                //
+                // Tabaka MBILI, kwa makusudi:
+                //  1. Hapa - "umeingia?" Ombi lisilo na token linakatwa
+                //     kabla halijafika injini ya GraphQL, likipata 401
+                //     UNAUTHENTICATED kutoka authenticationEntryPoint hapa
+                //     chini. JwtAuthFilter nayo inakata DISABLED /
+                //     PENDING_APPROVAL / must_change_password mapema zaidi.
+                //  2. Ndani ya kila resolver - "unaruhusiwa KUFANYA HILI?"
+                //     kupitia PermissionChecker.require(...) (angalia
+                //     CycleResolver/ProductionUnitResolver/FeedResolver).
+                //     Ukaguzi huu HAUWEZI kufanyika hapa: operesheni zote za
+                //     GraphQL zinapita kwenye URL moja (/graphql) lakini kila
+                //     moja inahitaji ruhusa yake.
+                //
+                // Tabaka la kwanza si la ziada lisilo na maana - ni
+                // defence-in-depth: resolver mpya ikisahau kuita
+                // PermissionChecker, bado haifikiwi na mtu asiye na token.
+                //
+                // REST controllers zinatumia @PreAuthorize (angalia
+                // MethodSecurityConfig) kwa tabaka la pili.
                 .anyRequest().authenticated()
             )
             // Makosa ya 401/403 yanayotokea kwenye filter chain yenyewe (kabla
@@ -83,20 +107,32 @@ public class SecurityConfig {
             // wa jibu kila wakati (kama Lsms) badala ya ukurasa wa default
             // wa Spring Security.
             .exceptionHandling(ex -> ex
+                // Msimbo ule ule PermissionChecker.currentUser() inaoutupa:
+                // "hakuna kikao halali" ina maana moja kwa frontend, ikikatwa
+                // hapa (filter chain, kabla ya DispatcherServlet) au ndani ya
+                // controller/resolver. Awali envelope hii ilikuwa haina
+                // errorCode kabisa, hivyo mteja alilazimika kutawi kwa ujumbe
+                // wa Kiswahili.
                 .authenticationEntryPoint((request, response, authException) ->
-                        writeJsonError(response, 401, "Hujaingia (login) - token haipo au si sahihi."))
+                        writeJsonError(response, 401, "Hujaingia (login) - token haipo au si sahihi.",
+                                ErrorCodes.UNAUTHENTICATED))
+                // Msimbo ule ule wa GlobalExceptionHandler.handleAccessDenied:
+                // permission-denied ina maana moja kwa frontend haijalishi
+                // imekataliwa hapa (filter chain) au ndani ya controller.
                 .accessDeniedHandler((request, response, accessDeniedException) ->
-                        writeJsonError(response, 403, "Huna ruhusa ya kufikia rasilimali hii."))
+                        writeJsonError(response, 403, "Huna ruhusa ya kufikia rasilimali hii.",
+                                ErrorCodes.FORBIDDEN))
             )
             .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
     }
 
-    private void writeJsonError(jakarta.servlet.http.HttpServletResponse response, int status, String message)
-            throws IOException {
+    private void writeJsonError(jakarta.servlet.http.HttpServletResponse response, int status,
+                                 String message, String errorCode) throws IOException {
         response.setStatus(status);
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
-        objectMapper.writeValue(response.getWriter(), ApiResponse.error(message));
+        objectMapper.writeValue(response.getWriter(),
+                errorCode == null ? ApiResponse.error(message) : ApiResponse.error(message, errorCode));
     }
 }

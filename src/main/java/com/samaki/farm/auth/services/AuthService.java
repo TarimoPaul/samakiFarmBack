@@ -1,11 +1,13 @@
 package com.samaki.farm.auth.services;
 
+import com.samaki.farm.auth.dto.ChangePasswordRequest;
 import com.samaki.farm.auth.dto.ForgotPasswordRequest;
 import com.samaki.farm.auth.dto.LoginRequest;
 import com.samaki.farm.auth.dto.LoginResponse;
 import com.samaki.farm.auth.dto.RegisterRequest;
 import com.samaki.farm.auth.dto.RegistrationResponse;
 import com.samaki.farm.auth.dto.ResetPasswordRequest;
+import com.samaki.farm.auth.security.JwtAuthFilter;
 import com.samaki.farm.auth.security.JwtUtil;
 import com.samaki.farm.common.exception.ConflictException;
 import com.samaki.farm.common.exception.ErrorCodes;
@@ -138,6 +140,45 @@ public class AuthService {
 
         rateLimiter.reset("login:" + clientIp);
         return buildLoginResponse(user);
+    }
+
+    /**
+     * B8 - kubadilisha password ukiwa umeingia. HAKUNA OTP/SMS: uthibitisho
+     * ni token halali + password ya sasa.
+     *
+     * Hii ndiyo njia ya kuondoa `must_change_password`. Bila hii, ROOT
+     * aliyetengenezwa kutoka environment variable angekwama: JwtAuthFilter
+     * inamzuia kila mahali, na njia pekee ya kubadilisha password ingekuwa
+     * OTP kwa SMS - huduma ambayo huenda haijawekwa bado.
+     *
+     * Token ya sasa HAIFUTWI: haibebi chochote kuhusu password, hivyo
+     * inabaki halali na ombi lililokuwa likizuiwa linapita mara moja
+     * (cache inafutwa hapa chini).
+     */
+    @Transactional
+    public void changePassword(java.util.UUID userId, ChangePasswordRequest req) {
+        User user = userRepository.findByUserId(userId)
+                .orElseThrow(() -> new UnauthorizedException(
+                        "Akaunti haipatikani.", ErrorCodes.INVALID_CREDENTIALS));
+
+        if (!passwordEncoder.matches(req.currentPassword(), user.getPasswordHash())) {
+            throw new UnauthorizedException("Password ya sasa si sahihi.",
+                    ErrorCodes.INVALID_CREDENTIALS);
+        }
+
+        // Bila kizuizi hiki, mtu angeweza "kubadilisha" kuwa password ile
+        // ile na kuondoa lazima ya kubadilisha - kufanya B8 isiwe na maana.
+        if (passwordEncoder.matches(req.newPassword(), user.getPasswordHash())) {
+            throw new IllegalArgumentException("Password mpya lazima itofautiane na ya sasa.");
+        }
+
+        user.setPasswordHash(passwordEncoder.encode(req.newPassword()));
+        user.setMustChangePassword(false);
+        userRepository.save(user);
+
+        // Bila hii, JwtAuthFilter ingeendelea kumzuia hadi cache ya
+        // dakika 15 iishe muda.
+        JwtAuthFilter.clearUserCache(userId);
     }
 
     /**

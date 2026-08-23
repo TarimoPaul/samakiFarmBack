@@ -1,6 +1,7 @@
 package com.samaki.farm.common.graphql;
 
 import com.samaki.farm.common.exception.ConflictException;
+import com.samaki.farm.common.exception.ErrorCodes;
 import com.samaki.farm.common.exception.ForbiddenException;
 import com.samaki.farm.common.exception.TooManyRequestsException;
 import com.samaki.farm.common.exception.UnauthorizedException;
@@ -40,12 +41,26 @@ public class GraphQlExceptionResolver extends DataFetcherExceptionResolverAdapte
 
     @Override
     protected GraphQLError resolveToSingleError(Throwable ex, DataFetchingEnvironment env) {
+        // Msimbo ule ule REST inaoutuma kwa permission-denied (angalia
+        // GlobalExceptionHandler.handleAccessDenied). Awali ulikuwa null,
+        // hivyo GraphQL ilikuwa na ErrorType.FORBIDDEN pekee bila
+        // extensions.errorCode - frontend ilishindwa kutawi mahali pamoja
+        // kwa API zote mbili.
         if (ex instanceof AccessDeniedException) {
-            return error(ex, env, ErrorType.FORBIDDEN, null);
+            return error(ex, env, ErrorType.FORBIDDEN, ErrorCodes.FORBIDDEN);
         }
         if (ex instanceof ForbiddenException fe) {
             return error(ex, env, ErrorType.FORBIDDEN, fe.getErrorCode());
         }
+        // errorCode inatoka kwenye exception yenyewe: UNAUTHENTICATED
+        // (hakuna kikao) au INVALID_CREDENTIALS (login imeshindwa) - REST
+        // inatuma ile ile.
+        //
+        // classification inabaki UNAUTHORIZED kwa sababu ErrorType ya Spring
+        // GraphQL ina thamani TANO tu (BAD_REQUEST, UNAUTHORIZED, FORBIDDEN,
+        // NOT_FOUND, INTERNAL_ERROR) - hakuna UNAUTHENTICATED. UNAUTHORIZED
+        // ndiyo inayolingana na 401. Maana kamili iko kwenye errorCode, na
+        // ndipo frontend inapaswa kutawi.
         if (ex instanceof UnauthorizedException ue) {
             return error(ex, env, ErrorType.UNAUTHORIZED, ue.getErrorCode());
         }
