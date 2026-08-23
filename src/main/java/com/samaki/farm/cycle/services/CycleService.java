@@ -1,6 +1,5 @@
 package com.samaki.farm.cycle.services;
 
-import com.samaki.farm.auth.security.AuthenticatedUser;
 import com.samaki.farm.auth.security.PermissionChecker;
 import com.samaki.farm.cycle.dto.CreateCycleInput;
 import com.samaki.farm.cycle.entity.Cycle;
@@ -45,16 +44,16 @@ public class CycleService {
 
     @Transactional(readOnly = true)
     public List<Cycle> listForCurrentFarm(String status) {
-        AuthenticatedUser user = permissionChecker.require("view_dashboard");
+        Integer farmId = permissionChecker.requireFarmScope("view_dashboard");
         if (status != null && !status.isBlank()) {
-            return cycleRepository.findByUnit_Farm_FarmIdAndStatus(user.getFarmId(), status);
+            return cycleRepository.findByUnit_Farm_FarmIdAndStatus(farmId, status);
         }
-        return cycleRepository.findByUnit_Farm_FarmId(user.getFarmId());
+        return cycleRepository.findByUnit_Farm_FarmId(farmId);
     }
 
     @Transactional
     public Cycle create(CreateCycleInput input) {
-        permissionChecker.require("edit_cycle");
+        permissionChecker.requireFarmScope("edit_cycle");
 
         ProductionUnit unit = unitRepository.findById(input.unitId())
                 .orElseThrow(() -> new IllegalArgumentException("Tanki/bwawa halijulikani"));

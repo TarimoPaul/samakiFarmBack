@@ -1,6 +1,5 @@
 package com.samaki.farm.feed.services;
 
-import com.samaki.farm.auth.security.AuthenticatedUser;
 import com.samaki.farm.auth.security.PermissionChecker;
 import com.samaki.farm.cycle.entity.Cycle;
 import com.samaki.farm.cycle.repository.CycleRepository;
@@ -55,38 +54,38 @@ public class FeedService {
 
     @Transactional(readOnly = true)
     public List<FeedPurchase> listPurchases() {
-        AuthenticatedUser user = permissionChecker.require("view_dashboard");
-        return purchaseRepository.findByFarm_FarmIdOrderByPurchaseDateDesc(user.getFarmId());
+        Integer farmId = permissionChecker.requireFarmScope("view_dashboard");
+        return purchaseRepository.findByFarm_FarmIdOrderByPurchaseDateDesc(farmId);
     }
 
     /** cycleId ikitolewa: ulishaji wa mzunguko mmoja; vinginevyo wa shamba zima. */
     @Transactional(readOnly = true)
     public List<FeedingLog> listFeedingLogs(Integer cycleId) {
-        AuthenticatedUser user = permissionChecker.require("view_dashboard");
+        Integer farmId = permissionChecker.requireFarmScope("view_dashboard");
         if (cycleId != null) {
             requireCycleInCallersFarm(cycleId);
             return feedingLogRepository.findByCycle_CycleIdOrderByLogDateDesc(cycleId);
         }
-        return feedingLogRepository.findByCycle_Unit_Farm_FarmIdOrderByLogDateDesc(user.getFarmId());
+        return feedingLogRepository.findByCycle_Unit_Farm_FarmIdOrderByLogDateDesc(farmId);
     }
 
     @Transactional(readOnly = true)
     public List<FeedStockMovement> listStockMovements() {
-        AuthenticatedUser user = permissionChecker.require("view_dashboard");
-        return movementRepository.findByFarm_FarmIdOrderByMovedAtDesc(user.getFarmId());
+        Integer farmId = permissionChecker.requireFarmScope("view_dashboard");
+        return movementRepository.findByFarm_FarmIdOrderByMovedAtDesc(farmId);
     }
 
     /** Salio la chakula kilichopo stoo (kg). */
     @Transactional(readOnly = true)
     public BigDecimal feedStockBalance() {
-        AuthenticatedUser user = permissionChecker.require("view_dashboard");
-        return movementRepository.sumBalanceByFarmId(user.getFarmId());
+        return movementRepository.sumBalanceByFarmId(
+                permissionChecker.requireFarmScope("view_dashboard"));
     }
 
     @Transactional
     public FeedPurchase recordPurchase(RecordFeedPurchaseInput input) {
-        AuthenticatedUser user = permissionChecker.require("manage_feed_stock");
-        Farm farm = farmRepository.findById(user.getFarmId())
+        Integer farmId = permissionChecker.requireFarmScope("manage_feed_stock");
+        Farm farm = farmRepository.findById(farmId)
                 .orElseThrow(() -> new IllegalArgumentException("Farm haipo"));
 
         BigDecimal quantity = requirePositive(input.quantityKg(), "Kiasi cha chakula");
@@ -107,7 +106,7 @@ public class FeedService {
 
     @Transactional
     public FeedingLog logFeeding(LogFeedingInput input) {
-        permissionChecker.require("log_feeding");
+        permissionChecker.requireFarmScope("log_feeding");
 
         Cycle cycle = requireCycleInCallersFarm(input.cycleId());
         BigDecimal quantity = requirePositive(input.quantityKg(), "Kiasi cha chakula");

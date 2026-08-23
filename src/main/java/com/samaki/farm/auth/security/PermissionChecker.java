@@ -1,6 +1,7 @@
 package com.samaki.farm.auth.security;
 
 import com.samaki.farm.common.exception.ErrorCodes;
+import com.samaki.farm.common.exception.ForbiddenException;
 import com.samaki.farm.common.exception.UnauthorizedException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
@@ -95,9 +96,45 @@ public class PermissionChecker {
      * uzalishaji kungemaanisha kuandika kwenye shamba lisilojulikana.
      */
     public void requireResourceInCallersFarm(Integer resourceFarmId) {
-        AuthenticatedUser user = currentUser();
-        if (user.getFarmId() == null || !user.getFarmId().equals(resourceFarmId)) {
+        Integer callersFarmId = requireFarmContext();
+        if (!callersFarmId.equals(resourceFarmId)) {
             throw new AccessDeniedException("Huruhusiwi kufikia shamba hili.");
         }
+    }
+
+    /**
+     * Ruhusa + shamba kwa hatua MOJA - mwanzo wa kila operesheni ya data
+     * ya shamba.
+     *
+     * Inarudisha farmId badala ya AuthenticatedUser kwa makusudi: service
+     * inayotaka shamba lake LAZIMA ipite hapa ili kulipata, hivyo haiwezi
+     * kusahau ukaguzi na bado ikafanya kazi. (Kuisoma moja kwa moja kwa
+     * user.getFarmId() ndiko kulikoruhusu null kupenya hadi kwenye
+     * findById na kutokeza INTERNAL_ERROR.)
+     */
+    public Integer requireFarmScope(String permissionCode) {
+        require(permissionCode);
+        return requireFarmContext();
+    }
+
+    /**
+     * farmId ya mwombaji, au ForbiddenException(NO_FARM_CONTEXT) kama
+     * hana shamba.
+     *
+     * Ni ForbiddenException (si AccessDeniedException) kwa sababu inabeba
+     * errorCode: frontend inapaswa kutofautisha "huna ruhusa" na "huna
+     * shamba" - ya kwanza ni suala la role, ya pili ni suala la uanachama,
+     * na zinatatuliwa kwa njia tofauti kabisa.
+     */
+    public Integer requireFarmContext() {
+        AuthenticatedUser user = currentUser();
+        if (user.getFarmId() == null) {
+            throw new ForbiddenException(
+                    user.isRoot()
+                            ? "ROOT hana shamba; tumia akaunti ya shamba husika."
+                            : "Bado hujapangiwa shamba lolote. Wasiliana na msimamizi.",
+                    ErrorCodes.NO_FARM_CONTEXT);
+        }
+        return user.getFarmId();
     }
 }

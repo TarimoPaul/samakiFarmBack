@@ -66,6 +66,20 @@ public final class ErrorCodes {
     public static final String TOO_MANY_REQUESTS = "TOO_MANY_REQUESTS";
 
     /**
+     * 403 - umeingia, una ruhusa husika, LAKINI huna shamba - hivyo ombi
+     * la data ya shamba halina maana. Kwa vitendo huyu ni ROOT (akaunti ya
+     * usimamizi, haina farmId), au mtu aliyeidhinishwa ambaye bado
+     * hajapangiwa shamba lolote.
+     *
+     * Awali hali hii ilikuwa KIMYA na inapotosha: query zilirudisha [] au
+     * 0.0 - zikionekana kama "shamba lako halina kitu" badala ya "huna
+     * shamba" - na mutations zilianguka kwa INTERNAL_ERROR isiyoeleweka
+     * pale farmId null ilipofika kwenye findById (angalia
+     * FRONTEND_BACKEND_AUDIT.md, D-9).
+     */
+    public static final String NO_FARM_CONTEXT = "NO_FARM_CONTEXT";
+
+    /**
      * 409 - ombi limegongana na data iliyopo: rudufu (mfano code ya tanki
      * inayojirudia kwenye shamba moja), au uhusiano usiokidhi masharti ya
      * database.

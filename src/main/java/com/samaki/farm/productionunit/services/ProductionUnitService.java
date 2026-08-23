@@ -1,6 +1,5 @@
 package com.samaki.farm.productionunit.services;
 
-import com.samaki.farm.auth.security.AuthenticatedUser;
 import com.samaki.farm.auth.security.PermissionChecker;
 import com.samaki.farm.farm.entity.Farm;
 import com.samaki.farm.farm.repository.FarmRepository;
@@ -29,14 +28,13 @@ public class ProductionUnitService {
 
     @Transactional(readOnly = true)
     public List<ProductionUnit> listForCurrentFarm() {
-        AuthenticatedUser user = permissionChecker.require("view_dashboard");
-        return unitRepository.findByFarm_FarmId(user.getFarmId());
+        return unitRepository.findByFarm_FarmId(permissionChecker.requireFarmScope("view_dashboard"));
     }
 
     @Transactional
     public ProductionUnit create(CreateProductionUnitInput input) {
-        AuthenticatedUser user = permissionChecker.require("manage_units");
-        Farm farm = farmRepository.findById(user.getFarmId())
+        Integer farmId = permissionChecker.requireFarmScope("manage_units");
+        Farm farm = farmRepository.findById(farmId)
                 .orElseThrow(() -> new IllegalArgumentException("Farm haipo"));
 
         ProductionUnit unit = new ProductionUnit();
