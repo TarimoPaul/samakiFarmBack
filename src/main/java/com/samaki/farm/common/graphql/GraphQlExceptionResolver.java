@@ -5,11 +5,13 @@ import com.samaki.farm.common.exception.ErrorCodes;
 import com.samaki.farm.common.exception.ForbiddenException;
 import com.samaki.farm.common.exception.TooManyRequestsException;
 import com.samaki.farm.common.exception.UnauthorizedException;
+import com.samaki.farm.common.web.GlobalExceptionHandler;
 import graphql.GraphQLError;
 import graphql.GraphqlErrorBuilder;
 import graphql.schema.DataFetchingEnvironment;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.graphql.execution.DataFetcherExceptionResolverAdapter;
 import org.springframework.graphql.execution.ErrorType;
 import org.springframework.security.access.AccessDeniedException;
@@ -65,15 +67,34 @@ public class GraphQlExceptionResolver extends DataFetcherExceptionResolverAdapte
             return error(ex, env, ErrorType.UNAUTHORIZED, ue.getErrorCode());
         }
         if (ex instanceof ConflictException) {
-            return error(ex, env, ErrorType.BAD_REQUEST, "CONFLICT");
+            return error(ex, env, ErrorType.BAD_REQUEST, ErrorCodes.CONFLICT);
         }
         if (ex instanceof TooManyRequestsException) {
-            return error(ex, env, ErrorType.BAD_REQUEST, "TOO_MANY_REQUESTS");
+            return error(ex, env, ErrorType.BAD_REQUEST, ErrorCodes.TOO_MANY_REQUESTS);
+        }
+        // Ukiukwaji wa vikwazo vya database (rudufu, FK isiyopo). REST
+        // tayari iliurudisha kama 409 (GlobalExceptionHandler.
+        // handleDataIntegrity); hapa ulikuwa haujashughulikiwa kabisa,
+        // hivyo `createProductionUnit` yenye code inayojirudia kwenye
+        // shamba moja ilirudi "INTERNAL_ERROR for <uuid>" na fomu ya
+        // mteja haikuweza kueleza tatizo (D-2).
+        //
+        // Ujumbe ni WETU, si ex.getMessage(): ule wa Hibernate/PostgreSQL
+        // unabeba SQL na majina ya constraints - undani usiopaswa kumfikia
+        // mteja. Ni ule ule REST inaoutuma.
+        if (ex instanceof DataIntegrityViolationException) {
+            logger.warn("Ukiukwaji wa vikwazo vya database kwenye GraphQL resolver", ex);
+            return error(GlobalExceptionHandler.DATA_INTEGRITY_MESSAGE, env,
+                    ErrorType.BAD_REQUEST, ErrorCodes.CONFLICT);
         }
         // Validation ya biashara (mfano kiasi hasi, tarehe isiyosomeka,
         // kitambulisho kisichojulikana) - ujumbe wake ni salama kuonyeshwa.
+        //
+        // errorCode ilikuwa null hapa, ikiacha makosa ya validation kuwa
+        // aina PEKEE ya hitilafu ambayo frontend haikuweza kuitambua kwa
+        // msimbo (D-6). classification inabaki BAD_REQUEST kama ilivyokuwa.
         if (ex instanceof IllegalArgumentException) {
-            return error(ex, env, ErrorType.BAD_REQUEST, null);
+            return error(ex, env, ErrorType.BAD_REQUEST, ErrorCodes.VALIDATION_ERROR);
         }
 
         logger.error("Hitilafu isiyotarajiwa kwenye GraphQL resolver", ex);
@@ -81,9 +102,13 @@ public class GraphQlExceptionResolver extends DataFetcherExceptionResolverAdapte
     }
 
     private GraphQLError error(Throwable ex, DataFetchingEnvironment env, ErrorType type, String code) {
+        return error(ex.getMessage() == null ? type.name() : ex.getMessage(), env, type, code);
+    }
+
+    private GraphQLError error(String message, DataFetchingEnvironment env, ErrorType type, String code) {
         GraphqlErrorBuilder<?> builder = GraphqlErrorBuilder.newError(env)
                 .errorType(type)
-                .message(ex.getMessage() == null ? type.name() : ex.getMessage());
+                .message(message);
         if (code != null) {
             builder.extensions(Map.of("errorCode", code));
         }

@@ -46,6 +46,15 @@ public class GlobalExceptionHandler {
     static final String FORBIDDEN_MESSAGE = "Huna ruhusa ya kufikia rasilimali hii.";
 
     /**
+     * Ujumbe WETU kwa ukiukwaji wa vikwazo vya database. Wa Hibernate/
+     * PostgreSQL unabeba SQL na majina ya constraints, hivyo haumfikii
+     * mteja. Ni public kwa sababu GraphQlExceptionResolver inautumia ule
+     * ule - ombi lilelile lieleze kitu kilekile likipita REST au GraphQL.
+     */
+    public static final String DATA_INTEGRITY_MESSAGE =
+            "Operesheni imekiuka vikwazo vya database (mfano: rudufu au uhusiano usiopo).";
+
+    /**
      * Permission-denied ya kawaida (RBAC) - 403 + ErrorCodes.FORBIDDEN.
      *
      * Vyanzo viwili, ujumbe wa aina mbili:
@@ -106,9 +115,14 @@ public class GlobalExceptionHandler {
                 .body(ApiResponse.error(ex.getMessage(), ErrorCodes.TOO_MANY_REQUESTS));
     }
 
+    // Status zinabaki zilezile (400/409). Kilichoongezwa ni errorCode:
+    // GraphQL sasa inatuma VALIDATION_ERROR/CONFLICT kwa makosa yale yale
+    // (angalia GraphQlExceptionResolver), na sheria ya frontend ni kutawi
+    // kwa msimbo kwa API ZOTE MBILI - hivyo REST nayo lazima iutume.
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<ApiResponse<Void>> handleIllegalArgument(IllegalArgumentException ex) {
-        return ResponseEntity.badRequest().body(ApiResponse.error(ex.getMessage()));
+        return ResponseEntity.badRequest()
+                .body(ApiResponse.error(ex.getMessage(), ErrorCodes.VALIDATION_ERROR));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
@@ -117,19 +131,21 @@ public class GlobalExceptionHandler {
                 .map(fe -> fe.getField() + ": " + fe.getDefaultMessage())
                 .collect(Collectors.joining("; "));
         return ResponseEntity.badRequest()
-                .body(ApiResponse.error(message.isBlank() ? "Data uliyotuma si sahihi." : message));
+                .body(ApiResponse.error(message.isBlank() ? "Data uliyotuma si sahihi." : message,
+                        ErrorCodes.VALIDATION_ERROR));
     }
 
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<ApiResponse<Void>> handleUnreadableBody(HttpMessageNotReadableException ex) {
         return ResponseEntity.badRequest()
-                .body(ApiResponse.error("Ombi (request body) halisomeki - angalia muundo wa JSON."));
+                .body(ApiResponse.error("Ombi (request body) halisomeki - angalia muundo wa JSON.",
+                        ErrorCodes.VALIDATION_ERROR));
     }
 
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ResponseEntity<ApiResponse<Void>> handleDataIntegrity(DataIntegrityViolationException ex) {
         return ResponseEntity.status(HttpStatus.CONFLICT)
-                .body(ApiResponse.error("Operesheni imekiuka vikwazo vya database (mfano: rudufu au uhusiano usiopo)."));
+                .body(ApiResponse.error(DATA_INTEGRITY_MESSAGE, ErrorCodes.CONFLICT));
     }
 
     @ExceptionHandler(Exception.class)

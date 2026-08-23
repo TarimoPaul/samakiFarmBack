@@ -64,4 +64,29 @@ public final class ErrorCodes {
 
     /** 429 - maombi mengi mno kwa muda mfupi. */
     public static final String TOO_MANY_REQUESTS = "TOO_MANY_REQUESTS";
+
+    /**
+     * 409 - ombi limegongana na data iliyopo: rudufu (mfano code ya tanki
+     * inayojirudia kwenye shamba moja), au uhusiano usiokidhi masharti ya
+     * database.
+     *
+     * Awali GraphQL ILIKUWA HAIUTUMI kabisa - DataIntegrityViolationException
+     * haikuwa na tawi kwenye GraphQlExceptionResolver, hivyo ilishuka hadi
+     * INTERNAL_ERROR na ujumbe wake ukafichwa. Mteja alipata
+     * "INTERNAL_ERROR for <uuid>" badala ya kujua kwamba code
+     * ameiandika tayari ipo (angalia FRONTEND_BACKEND_AUDIT.md, D-2).
+     */
+    public static final String CONFLICT = "CONFLICT";
+
+    /**
+     * 400 - data iliyotumwa haikubaliki kibiashara (kiasi hasi, tarehe
+     * isiyosomeka, kitambulisho kisichojulikana).
+     *
+     * Ipo kwa sababu makosa haya YALIKUWA yanarudi bila errorCode yoyote
+     * kwenye GraphQL (null), ilhali sheria ya frontend ni "tawi kwa
+     * errorCode, KAMWE si kwa ujumbe" - hivyo hapakuwa na cha kutawia kwa
+     * makosa ya validation (D-6). Ujumbe wenyewe unabaki ukielezea NINI
+     * hasa kimekataliwa.
+     */
+    public static final String VALIDATION_ERROR = "VALIDATION_ERROR";
 }
