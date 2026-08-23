@@ -58,6 +58,15 @@ public class CycleService {
 
         ProductionUnit unit = unitRepository.findById(input.unitId())
                 .orElseThrow(() -> new IllegalArgumentException("Tanki/bwawa halijulikani"));
+        // unitId inatoka kwa mteja, hivyo LAZIMA ithibitishwe: bila mstari
+        // huu mtu mwenye 'edit_cycle' angeweza kuunda mzunguko ndani ya
+        // tanki la shamba lingine (D-1).
+        permissionChecker.requireResourceInCallersFarm(unit.getFarm().getFarmId());
+
+        // speciesId HAIKAGULIWI kwa shamba kwa MAKUSUDI: `species` ni
+        // katalogi ya kimfumo inayoshirikiwa na mashamba yote (Sato,
+        // Kambale...), si data ya shamba fulani - haina farm_id kabisa
+        // (angalia V1__init_schema.sql).
         Species species = speciesRepository.findById(input.speciesId())
                 .orElseThrow(() -> new IllegalArgumentException("Aina ya samaki haijulikani"));
 

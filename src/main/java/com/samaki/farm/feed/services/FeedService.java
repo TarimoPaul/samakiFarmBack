@@ -144,7 +144,10 @@ public class FeedService {
     private Cycle requireCycleInCallersFarm(Integer cycleId) {
         Cycle cycle = cycleRepository.findById(cycleId)
                 .orElseThrow(() -> new IllegalArgumentException("Mzunguko haujulikani"));
-        permissionChecker.requireSameFarm(cycle.getUnit().getFarm().getFarmId());
+        // requireResourceInCallersFarm (si requireSameFarm): hii ni data ya
+        // uzalishaji, hivyo inatumia mchekeo ule ule ambao sasa CycleService
+        // nayo inautumia - ukaguzi mmoja kwa module zote za shamba.
+        permissionChecker.requireResourceInCallersFarm(cycle.getUnit().getFarm().getFarmId());
         return cycle;
     }
 

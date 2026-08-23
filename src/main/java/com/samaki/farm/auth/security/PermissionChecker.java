@@ -55,10 +55,48 @@ public class PermissionChecker {
         return user;
     }
 
-    /** Inahakikisha farmId iliyoombwa inalingana na shamba la mtumiaji (isipokuwa ROOT). */
+    /**
+     * OPERESHENI ZA USIMAMIZI - farmId iliyoombwa lazima ilingane na shamba
+     * la mtumiaji, ISIPOKUWA ROOT anayeruhusiwa kuvuka mashamba yote.
+     *
+     * Inatumika pale farmId inapotoka kwa mteja kama sehemu ya ombi la
+     * USIMAMIZI: kumweka mtu kwenye shamba, kubadilisha role yake,
+     * kuorodhesha watu wa shamba (angalia FarmUserService/UserService).
+     * ROOT LAZIMA aweze kufanya hizi - ndiye anayeanzisha shamba jipya na
+     * kumweka mmiliki wake wa kwanza; bila bypass hii hakuna njia ya
+     * kuanzisha mfumo kabisa.
+     *
+     * KWA DATA YA UZALISHAJI tumia requireResourceInCallersFarm(...) badala
+     * yake - ina sheria TOFAUTI kwa makusudi (angalia hapo chini).
+     */
     public void requireSameFarm(Integer requestedFarmId) {
         AuthenticatedUser user = currentUser();
         if (!user.isRoot() && !requestedFarmId.equals(user.getFarmId())) {
+            throw new AccessDeniedException("Huruhusiwi kufikia shamba hili.");
+        }
+    }
+
+    /**
+     * DATA YA UZALISHAJI - njia MOJA ya kuthibitisha kwamba rasilimali
+     * iliyotajwa kwa kitambulisho (unit, cycle, n.k.) ni ya shamba la
+     * mwombaji.
+     *
+     * Ipo kwa sababu ukaguzi huu ulikuwa umeandikwa ndani ya FeedService
+     * pekee, na CycleService.create ilikuwa imeusahau kabisa: mtu mwenye
+     * 'edit_cycle' kwenye shamba lolote aliweza kuunda mzunguko ndani ya
+     * tanki la shamba LINGINE kwa kutuma unitId yake tu (angalia
+     * FRONTEND_BACKEND_AUDIT.md, D-1). Ukaguzi ukiwa hapa, module mpya
+     * inaita method hii hii badala ya kuandika - au kusahau - logic yake.
+     *
+     * SHERIA: anayefanya kazi kwenye data ya shamba LAZIMA awe na shamba.
+     * HAKUNA bypass ya ROOT, tofauti na requireSameFarm hapo juu: ROOT ni
+     * akaunti ya usimamizi (watumiaji/roles/mashamba) na hana farmId, hivyo
+     * hana shamba la kulinganisha nalo. Kumruhusu kuandika data ya
+     * uzalishaji kungemaanisha kuandika kwenye shamba lisilojulikana.
+     */
+    public void requireResourceInCallersFarm(Integer resourceFarmId) {
+        AuthenticatedUser user = currentUser();
+        if (user.getFarmId() == null || !user.getFarmId().equals(resourceFarmId)) {
             throw new AccessDeniedException("Huruhusiwi kufikia shamba hili.");
         }
     }
