@@ -91,7 +91,7 @@ Hii ndiyo njia ya ROOT aliyetengenezwa kutoka environment variable kujinasua —
 
 Mahitaji: JDK 17+, Maven, PostgreSQL.
 
-**Environment variables za LAZIMA** — app haitaanza bila hizi (angalia `.env.example`):
+**Siri za LAZIMA** — app haitaanza bila hizi:
 
 | Variable | Maana |
 |---|---|
@@ -100,13 +100,21 @@ Mahitaji: JDK 17+, Maven, PostgreSQL.
 
 Za hiari lakini muhimu: `ROOT_PHONE`, `ROOT_PASSWORD`, `ROOT_EMAIL` — zisipowekwa, **ROOT hatengenezwi** (app inaanza, lakini kwa onyo kwenye logs).
 
+Nakili `.env.example` kuwa `.env`, jaza thamani, kisha:
+
 ```powershell
-$env:DB_PASSWORD = "..."
-$env:JWT_SECRET  = "..."
-$env:ROOT_PHONE  = "0000000000"
-$env:ROOT_PASSWORD = "..."
 mvn spring-boot:run
 ```
+
+`.env` inasomwa na app yenyewe kupitia `spring.config.import` (angalia `application.yml`), hivyo kitufe cha **Run** cha IDE nacho kinafanya kazi bila usanidi wowote wa ziada. Faili hiyo iko kwenye `.gitignore`.
+
+Bila `.env` wala environment variables, kosa ni:
+
+```
+Could not resolve placeholder 'JWT_SECRET' in value "${JWT_SECRET}"
+```
+
+Kwenye production hakuna `.env` — weka **environment variables halisi**, ambazo zina kipaumbele zaidi ya faili hiyo.
 
 Flyway inaendesha migrations kiotomatiki. GraphiQL: `http://localhost:8082/graphiql`.
 

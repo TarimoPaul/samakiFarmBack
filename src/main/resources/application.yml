@@ -2,6 +2,25 @@ spring:
   application:
     name: samaki-farm-backend
 
+  # Inapakia `.env` ya mzizi wa project (haiingii kwenye git) kama chanzo cha
+  # properties, hivyo ${JWT_SECRET} na wenzake wanapatikana bila kuweka
+  # environment variables kwa mkono kila mara.
+  #
+  # Bila mstari huu, `mvn spring-boot:run` au kubonyeza Run kwenye IDE
+  # kunashindwa kuanza:
+  #     Could not resolve placeholder 'JWT_SECRET' in value "${JWT_SECRET}"
+  # - Spring HAISOMI `.env` yenyewe, ilhali .env.example ilikuwa ikiahidi
+  # kwamba kunakili faili hiyo kunatosha.
+  #
+  # `optional:` - app inaanza bila `.env` kabisa (ndivyo production
+  # inavyofanya kazi: environment variables halisi).
+  # `[.properties]` - inaeleza Spring jinsi ya kusoma faili isiyo na kiendelezi.
+  #
+  # Environment variables HALISI zina kipaumbele zaidi ya faili hii, hivyo
+  # deploy inaweza kuzibadilisha bila kugusa `.env`.
+  config:
+    import: optional:file:.env[.properties]
+
   datasource:
     url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:samakiFarm}
     username: ${DB_USER:postgres}
