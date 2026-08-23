@@ -54,3 +54,9 @@ app:
     phone: ${ROOT_PHONE:}
     email: ${ROOT_EMAIL:}
     password: ${ROOT_PASSWORD:}
+    # Swichi ya dharura: ROOT_PASSWORD_RESET=true inarudisha password ya
+    # ROOT ALIYEPO kuwa ROOT_PASSWORD, na kumlazimisha aibadilishe.
+    # Ni ya MARA MOJA - iondoe baada ya kuitumia (angalia
+    # RbacSeedService.seedRootUser). Default ni false, hivyo restart ya
+    # kawaida haiwezi kufuta password ya ROOT kimyakimya.
+    password-reset: ${ROOT_PASSWORD_RESET:false}

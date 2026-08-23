@@ -77,6 +77,13 @@ Hii ndiyo njia ya ROOT aliyetengenezwa kutoka environment variable kujinasua —
 
 - **JWT haibebi ruhusa.** Inabeba `userId` + `isRoot` (+ `farmId`/`roleId`/`roleName` kwa muktadha wa UI). Kila request, `JwtAuthFilter` inasoma hali ya akaunti na ruhusa **fresh kutoka DB** (cache: dakika 15 kwa mtumiaji, dakika 5 kwa ROOT). Ukibadilisha role, kuzuia, au kufuta mtu — inaanza kufanya kazi papo hapo bila kusubiri token iishe muda.
 - **ROOT ni flag (`users.is_root`), si jina la role.** Hana uanachama wowote. Anatengenezwa na `RbacSeedService` kutoka environment variables pekee, na **analazimishwa** kubadilisha password mara ya kwanza — si onyo tu: `JwtAuthFilter` inamzuia kila mahali hadi abadilishe. `is_root` yenyewe inasomwa **kutoka DB**, si kutoka claim ya token, hivyo kuiondoa kunafanya kazi papo hapo.
+- **ROOT akisahau password yake**: hana mtu wa juu yake wa kumsaidia, na akaunti yake huenda haina namba inayopokea SMS. Njia ya kumrudisha ni **environment variable, si endpoint** — inayoifikia ni mwenye ufikiaji wa server, si mtu yeyote mwenye mtandao:
+
+  ```
+  ROOT_PASSWORD=<mpya>   ROOT_PASSWORD_RESET=true   # kisha anzisha app upya MARA MOJA
+  ```
+
+  Seeding inarudisha password ya ROOT **aliyepo** kuwa `ROOT_PASSWORD` na kuweka `must_change_password = true`, hivyo analazimika kuibadilisha akiingia. **Ondoa `ROOT_PASSWORD_RESET` mara tu baada ya kuitumia** — ikiachwa, kila restart itafuta password aliyoiweka mwenyewe. Bila swichi hiyo (default), seeding ni *create-if-not-exists*: ROOT aliyepo haguswi kabisa.
 - **Idhini inadhibitiwa na RUHUSA (`approve_users`), si jina la role** — role yoyote iliyopewa ruhusa hiyo inaweza kuidhinisha.
 - Permissions zinapakiwa kutoka `seed/permissions.csv` (idempotent). Role↔permission zinapakiwa kutoka `seed/role_permissions.csv` **mara moja tu kwa role isiyo na ruhusa yoyote** — role iliyobadilishwa na admin haiguswi tena kwenye restart. Kwa hiyo **ruhusa mpya kwa role zilizopo lazima ziongezwe kwa migration**, si kwa CSV pekee (angalia `V7__auth_permissions.sql`).
 

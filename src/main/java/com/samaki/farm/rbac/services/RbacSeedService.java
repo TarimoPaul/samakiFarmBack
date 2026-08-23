@@ -73,6 +73,23 @@ public class RbacSeedService {
     @Value("${app.root.password:}")
     private String rootPassword;
 
+    /**
+     * Swichi ya dharura ya kurudisha password ya ROOT (ROOT_PASSWORD_RESET).
+     *
+     * Bila hii, seeding ni create-if-not-exists tu: ROOT aliyepo HAGUSWI
+     * kamwe, ili password aliyoiweka mwenyewe isifutwe kila restart.
+     * Matokeo yake ni kwamba ROOT akisahau password yake hakuna njia ya
+     * kumrudisha - hana mtu wa juu yake wa kumsaidia, na akaunti yake
+     * huenda haina namba ya simu inayopokea SMS ya OTP.
+     *
+     * Swichi hii inatolewa kama ENVIRONMENT VARIABLE, si endpoint ya HTTP,
+     * KWA MAKUSUDI: inayoifikia ni yule mwenye ufikiaji wa server/deploy
+     * config, si mtu yeyote mwenye mtandao. Hakuna njia ya kuichochea
+     * kutoka nje.
+     */
+    @Value("${app.root.password-reset:false}")
+    private boolean rootPasswordReset;
+
     private final PermissionRepository permissionRepository;
     private final RoleRepository roleRepository;
     private final UserRepository userRepository;
@@ -173,11 +190,22 @@ public class RbacSeedService {
      * inaendelea kufanya kazi, lakini kwa onyo kubwa. Ni salama zaidi
      * kuliko kuunda msimamizi mkuu mwenye password inayojulikana na kila
      * anayesoma repo.
+     *
+     * Hali tatu:
+     *
+     *  - ROOT hayupo                    -> anatengenezwa, must_change_password=true
+     *  - ROOT yupo, hakuna reset        -> password HAIGUSWI (isRoot/status/email pekee)
+     *  - ROOT yupo, ROOT_PASSWORD_RESET -> password inarudishwa kuwa ROOT_PASSWORD,
+     *                                      must_change_password=true
      */
     private void seedRootUser() {
         if (rootPhone == null || rootPhone.isBlank() || rootPassword == null || rootPassword.isBlank()) {
             logger.warn("ROOT hajatengenezwa: ROOT_PHONE na/au ROOT_PASSWORD hazijawekwa. "
                     + "Weka environment variables hizo kisha anzisha app upya.");
+            if (rootPasswordReset) {
+                logger.error("ROOT_PASSWORD_RESET=true LAKINI ROOT_PHONE/ROOT_PASSWORD "
+                        + "hazijawekwa - hakuna kilichobadilishwa. Weka zote tatu kwa pamoja.");
+            }
             return;
         }
 
@@ -198,12 +226,37 @@ public class RbacSeedService {
                 root.setEmail(rootEmail);
                 changed = true;
             }
+            // Password HAIGUSWI isipokuwa mendeshaji ameiomba kwa uwazi
+            // kupitia ROOT_PASSWORD_RESET. Bila swichi hiyo, kubadilisha
+            // hapa kungefuta password aliyoiweka ROOT mwenyewe kila restart.
+            if (rootPasswordReset) {
+                root.setPasswordHash(passwordEncoder.encode(rootPassword));
+                // Ile ile ya wakati wa kutengenezwa: password inayotoka
+                // environment ni ya MARA MOJA. JwtAuthFilter itamzuia kila
+                // mahali hadi aibadilishe kupitia /api/auth/change-password.
+                root.setMustChangePassword(true);
+                changed = true;
+            }
+
             if (changed) {
                 userRepository.save(root);
                 logger.info("Mtumiaji wa ROOT aliyepo amesasishwa (isRoot/status/email)");
             }
-            // Password HAIGUSWI hapa: ikibadilishwa kwenye kila restart,
-            // password aliyoiweka ROOT mwenyewe ingefutwa.
+
+            if (rootPasswordReset) {
+                // Cache ya JwtAuthFilter inashikilia must_change_password.
+                // Bila kuifuta, token yoyote ya ROOT iliyopo ingeendelea
+                // kupita hadi dakika 15 ziishe - yaani reset isingekuwa
+                // ya papo hapo. (Kwenye startup safi cache ni tupu, lakini
+                // hii inaifanya iwe sahihi hata seeding ikiitwa tena.)
+                JwtAuthFilter.clearUserCache(root.getUserId());
+                logger.warn("PASSWORD YA ROOT IMERUDISHWA kutoka ROOT_PASSWORD "
+                        + "(ROOT_PASSWORD_RESET=true), na analazimika kuibadilisha "
+                        + "atakapoingia. ONDOA ROOT_PASSWORD_RESET kwenye environment "
+                        + "SASA - ni operesheni ya mara moja. Ikiachwa, kila restart "
+                        + "itarudisha password ile ile ya environment na kufuta "
+                        + "aliyoiweka mwenyewe.");
+            }
             return;
         }
 
