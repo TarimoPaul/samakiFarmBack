@@ -12,6 +12,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
@@ -46,7 +47,7 @@ public class RoleService {
         role.setName(req.name());
         role.setDescription(req.description());
         if (req.permissionIds() != null) {
-            role.setPermissions(Set.copyOf(permissionRepository.findAllById(req.permissionIds())));
+            role.setPermissions(mutableSetOf(req.permissionIds()));
         }
         Role saved = roleRepository.save(role);
 
@@ -68,7 +69,7 @@ public class RoleService {
         Role role = roleRepository.findById(roleId)
                 .orElseThrow(() -> new IllegalArgumentException("Role haipo"));
 
-        role.setPermissions(Set.copyOf(permissionRepository.findAllById(permissionIds)));
+        role.setPermissions(mutableSetOf(permissionIds));
         Role saved = roleRepository.save(role);
 
         JwtAuthFilter.clearRootCache();
@@ -80,6 +81,21 @@ public class RoleService {
     @Transactional(readOnly = true)
     public Page<Permission> listAllPermissions(Pageable pageable) {
         return permissionRepository.findAll(pageable);
+    }
+
+    /**
+     * LAZIMA iwe Set inayobadilika. Set.copyOf(...) inarudisha immutable
+     * set, na wakati wa merge Hibernate huita clear() kwenye collection ya
+     * entity - hivyo kuhifadhi role yenye ruhusa mpya kulikuwa kunatupa
+     * UnsupportedOperationException, yaani 500 kwa kila
+     * PUT /api/roles/{id}/permissions.
+     *
+     * (Endpoint hii haikuwa na UI wala haikujaribiwa kwenye ukaguzi wa
+     * awali, hivyo hitilafu hii ilikuwa haijaonekana - imegunduliwa
+     * wakati wa kuthibitisha F4.)
+     */
+    private Set<Permission> mutableSetOf(List<Integer> permissionIds) {
+        return new LinkedHashSet<>(permissionRepository.findAllById(permissionIds));
     }
 
     private static RoleSummary toSummary(Role role) {
