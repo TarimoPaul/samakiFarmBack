@@ -2,6 +2,9 @@ type Query {
     productionUnits: [ProductionUnit!]!
     cycles(status: String): [Cycle!]!
 
+    # Katalogi ya kimfumo - inahitajika kujaza speciesId ya CreateCycleInput
+    species: [Species!]!
+
     # ---------- Feed ----------
     feedPurchases: [FeedPurchase!]!
     feedingLogs(cycleId: Int): [FeedingLog!]!
@@ -32,6 +35,16 @@ input CreateProductionUnitInput {
     type: String!
     sizeM3: Float
     waterSource: String
+}
+
+# Aina ya samaki. Ni katalogi ya kimfumo (haina farm_id) - inasomwa tu;
+# hakuna mutation ya kuunda/kuhariri kwa makusudi.
+type Species {
+    speciesId: ID!
+    name: String!
+    # Miezi ya wastani hadi mavuno - ndiyo inayokokotoa expectedHarvestDate
+    growthMonthsAvg: Float!
+    avgHarvestWeightKg: Float!
 }
 
 type Cycle {
