@@ -18,6 +18,8 @@ import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.List;
+import java.util.Set;
+import java.util.TreeSet;
 
 /**
  * FR-3.2 (kukokotoa expected_harvest_date kiotomatiki) + FR-4.1 (kuzalisha
@@ -43,13 +45,34 @@ public class CycleService {
         this.permissionChecker = permissionChecker;
     }
 
+    /**
+     * Hali halali za mzunguko - zilezile zilizoandikwa kwenye Cycle.status
+     * na kwenye V1__init_schema.sql.
+     */
+    private static final Set<String> STATUSES = Set.of("ACTIVE", "HARVESTED", "FAILED");
+
     @Transactional(readOnly = true)
     public List<Cycle> listForCurrentFarm(String status) {
         Integer farmId = permissionChecker.requireFarmScope("view_dashboard");
         if (status != null && !status.isBlank()) {
-            return cycleRepository.findByUnit_Farm_FarmIdAndStatus(farmId, status);
+            return cycleRepository.findByUnit_Farm_FarmIdAndStatus(farmId, requireKnownStatus(status));
         }
         return cycleRepository.findByUnit_Farm_FarmId(farmId);
+    }
+
+    /**
+     * Hali isiyojulikana ILIKUWA inarudisha [] kimyakimya - hivyo "ACITVE"
+     * iliyokosewa herufi ilionekana kama "hakuna mizunguko" badala ya
+     * "umeuliza kitu kisichokuwepo" (angalia FRONTEND_BACKEND_AUDIT.md,
+     * D-12).
+     */
+    private static String requireKnownStatus(String status) {
+        String normalized = status.trim().toUpperCase();
+        if (!STATUSES.contains(normalized)) {
+            throw new IllegalArgumentException("Hali ya mzunguko si sahihi. Chagua: "
+                    + String.join(", ", new TreeSet<>(STATUSES)) + ".");
+        }
+        return normalized;
     }
 
     @Transactional
