@@ -39,12 +39,24 @@ spring:
     enabled: true
     locations: classpath:db/migration
 
+  # Zote mbili ni zana za MAENDELEO zinazofichua muundo wa API: graphiql ni
+  # console ya kutuma query, na schema printer inachapisha schema nzima.
+  # Awali zilikuwa `true` hapa zikiwa na maoni tu yakisema "zima kwenye
+  # production" - hakuna kilichokuwa kikilazimisha hilo (angalia
+  # FRONTEND_BACKEND_AUDIT.md, D-11).
+  #
+  # Sasa zimezimwa kwa chaguo-msingi na zinawashwa na profile ya `dev`
+  # PEKEE (angalia application-dev.yml). Chaguo-msingi salama ni muhimu
+  # zaidi kuliko urahisi: deploy iliyosahau kuweka profile inapata hali
+  # iliyofungwa, si iliyo wazi.
+  #
+  # Kwa maendeleo:  mvn spring-boot:run -Dspring-boot.run.profiles=dev
   graphql:
     graphiql:
-      enabled: true   # UI ya kujaribu GraphQL - zima kwenye production (weka false)
+      enabled: false
     schema:
       printer:
-        enabled: true
+        enabled: false
 
 server:
   port: ${PORT:8082}

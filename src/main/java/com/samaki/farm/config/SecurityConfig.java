@@ -79,7 +79,14 @@ public class SecurityConfig {
                 // ndani ya controller kwanza.
                 .requestMatchers("/api/auth/me").authenticated()
                 .requestMatchers("/api/auth/**").permitAll()
-                .requestMatchers("/actuator/health").permitAll()
+                // Hakuna sheria ya /actuator/health hapa: actuator HAIPO
+                // kwenye pom.xml, hivyo njia hiyo haijamap-iwa kwa handler
+                // yoyote. Kuiruhusu kulikuwa kunaifanya ionekane kama
+                // endpoint ya afya ilhali ilirudisha 500 kutoka
+                // GlobalExceptionHandler - probe ya deploy ingeripoti huduma
+                // imekufa daima (angalia FRONTEND_BACKEND_AUDIT.md, D-5).
+                // Ikihitajika, ongeza spring-boot-starter-actuator KWANZA,
+                // kisha rudisha sheria hii.
                 // /graphql inaingia hapa chini kwenye anyRequest() - yaani
                 // INAHITAJI token halali kwenye filter chain, kama endpoint
                 // nyingine yoyote. (Maoni ya awali hapa yalidai ni "wazi";

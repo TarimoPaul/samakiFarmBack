@@ -1,0 +1,14 @@
+# ============================================================
+# Profile ya MAENDELEO pekee:  -Dspring-boot.run.profiles=dev
+#
+# Zana zinazofichua muundo wa API zinawashwa hapa, si kwenye
+# application.yml, ili deploy ya production isizipate kwa bahati mbaya.
+# Hakuna profile = zimezimwa (angalia application.yml).
+# ============================================================
+spring:
+  graphql:
+    graphiql:
+      enabled: true   # console ya kutuma query: http://localhost:8082/graphiql
+    schema:
+      printer:
+        enabled: true
