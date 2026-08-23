@@ -14,6 +14,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.List;
@@ -71,7 +72,7 @@ public class CycleService {
 
         LocalDate stockingDate = LocalDate.parse(input.stockingDate());
         // FR-3.2: kukokotoa tarehe ya mavuno kiotomatiki kutoka growth_months_avg
-        LocalDate expectedHarvest = stockingDate.plusMonths(species.getGrowthMonthsAvg().longValue());
+        LocalDate expectedHarvest = expectedHarvestDate(stockingDate, species.getGrowthMonthsAvg());
 
         Cycle cycle = new Cycle();
         cycle.setUnit(unit);
@@ -92,6 +93,34 @@ public class CycleService {
         createDefaultTasks(cycle);
 
         return cycle;
+    }
+
+    /**
+     * FR-3.2 - stockingDate + growth_months_avg.
+     *
+     * growth_months_avg ni NUMERIC(4,1), yaani nusu-mwezi ni thamani
+     * halali. Awali hapa palikuwa na .longValue() ambayo INAKATA sehemu ya
+     * desimali: aina ya miezi 6.5 ilikokotolewa kama 6 - wiki mbili
+     * mapema, kimyakimya (angalia FRONTEND_BACKEND_AUDIT.md, D-7).
+     *
+     * Miezi mizima inaongezwa kama miezi (hivyo tarehe ya mwezi
+     * inahifadhiwa), na sehemu ya desimali inageuzwa kuwa SIKU za mwezi
+     * halisi inamoangukia - si wastani wa siku 30 - ili nusu ya Februari
+     * isihesabiwe sawa na nusu ya Julai.
+     */
+    static LocalDate expectedHarvestDate(LocalDate stockingDate, BigDecimal growthMonthsAvg) {
+        long wholeMonths = growthMonthsAvg.longValue();
+        LocalDate date = stockingDate.plusMonths(wholeMonths);
+
+        BigDecimal fraction = growthMonthsAvg.subtract(BigDecimal.valueOf(wholeMonths));
+        if (fraction.signum() <= 0) {
+            return date;
+        }
+
+        long extraDays = fraction.multiply(BigDecimal.valueOf(date.lengthOfMonth()))
+                .setScale(0, RoundingMode.HALF_UP)
+                .longValue();
+        return date.plusDays(extraDays);
     }
 
     private void createDefaultTasks(Cycle cycle) {
