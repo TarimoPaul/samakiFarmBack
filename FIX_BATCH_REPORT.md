@@ -1,6 +1,6 @@
 # Fix Batch Report — Backend (post-audit blockers + hygiene)
 
-**Date:** 2026-08-23
+**Date:** 2026-08-23 — follow-up 2026-08-24 (F3 decision, D-13 follow-up, merge)
 **Repo:** `D:\KAMPUNI PROJECT\spring-backend`
 **Branch:** `fix/post-audit-backend-batch` (from `main` @ `8b030dc`)
 **Verified against:** running instance on `http://localhost:8082`, PostgreSQL 17.5 `samakiFarm`
@@ -27,8 +27,9 @@ Every fix compiles (`mvn -o clean compile`) and was committed separately. All ev
 | 9 | `97d099c` | `chore: config and repo hygiene (D-5, D-10, D-11)` |
 | 10 | `6408274` | `fix(rbac): PUT /api/roles/{id}/permissions was a guaranteed 500 (D-13, new)` |
 | 11 | `056163a` | `fix(errors): unmapped paths answer 404, not 500 (D-14, new)` |
+| 12 | `4b4c98e` | `fix(rbac): an unknown permission id now rejects the whole role edit (D-13 follow-up)` |
 
-18 files, +526 / −39. **No Flyway migration was added or edited** — schema is still at V8, confirmed at startup (`Current version of schema "public": 8`). Nothing in F1–F4 or the hygiene sweep required a schema change, so `Data_Dictionary_Majedwali.md` and the ERD are **not** regenerated; they remain accurate.
+18 files, +585 / −39. **No Flyway migration was added or edited** — schema is still at V8, confirmed at startup (`Current version of schema "public": 8`). Nothing in F1–F4 or the hygiene sweep required a schema change, so `Data_Dictionary_Majedwali.md` and the ERD are **not** regenerated; they remain accurate.
 
 ### Test principals used throughout
 
@@ -174,7 +175,7 @@ $ curl -w "HTTP %{http_code}" -X POST /api/auth/register   # phone already regis
 HTTP 409
 ```
 
-> **Beyond the letter of the acceptance — please confirm.** The acceptance says "REST 409 for the same duplicate unchanged". Statuses are unchanged (400/409), but I also **added the matching `errorCode` to the REST envelope** (`CONFLICT` on 409, `VALIDATION_ERROR` on 400). The stated goal of F3 is that one failure looks the same through either API, and that only holds if both ends send the code — but it is a wider edit than asked for, and reverting just that part is a two-line change if you'd rather not have it.
+> **Wider than the acceptance — confirmed and kept (2026-08-24).** The acceptance said "REST 409 for the same duplicate unchanged". Statuses are unchanged (400/409), but the matching **`errorCode` was also added to the REST envelope** (`CONFLICT` on 409, `VALIDATION_ERROR` on 400). This was flagged as wider than asked, with an offer to revert it; the decision is to **keep it**. The goal of F3 is that one failure looks the same through either API, and that only holds if both ends send the code. It is now load-bearing: the D-13 follow-up below relies on the REST `VALIDATION_ERROR` it added.
 >
 > One note on the duplicate specifically: `(farm_id, code)` has no REST endpoint at all, so the 409 shown above is a different conflict path (`ConflictException` from register). No REST route can trigger that exact constraint.
 
@@ -360,7 +361,83 @@ Every attempt to change a role's permissions answered `500 {"message":"Hitilafu 
 
 This matters beyond F4: **runtime-editable permissions are the premise of the whole RBAC design** — it is why `/me` exists rather than branching on role name — and the one endpoint that edits them could not run.
 
-**Not fixed, for you to decide:** `permissionRepository.findAllById(ids)` silently drops ids that do not exist, so a request naming an unknown permission quietly assigns fewer than asked and returns 200.
+### Follow-up — unknown permission ids are now rejected outright (`4b4c98e`, 2026-08-24)
+
+The first fix left one thing open: `permissionRepository.findAllById(ids)` silently drops ids that do not exist, so a request naming an unknown permission quietly assigned fewer permissions than asked and still answered `200`. **Decision: reject the whole edit.** A partial write is the worse failure here — this is the endpoint that writes security policy, and a silently-missing permission does not surface at the request that caused it, but later and somewhere else, as a user blocked from something they should have been allowed to do.
+
+`RoleService.resolvePermissions()` now validates the entire list **before the role is touched**. Any unknown id — or a `null` inside the list — throws `IllegalArgumentException`, which `GlobalExceptionHandler` answers as `400` + `errorCode: VALIDATION_ERROR` (the REST code F3 added). Nothing is written, and no auth cache is cleared, because nothing changed. `createRole` takes the same path, so a role cannot be *created* with a quietly-trimmed permission set either.
+
+Two things stay as they were, deliberately: an **empty list still clears every permission** (that is how a role is emptied), and **duplicate ids are still not an error** (asking for the same permission twice is the same request).
+
+#### Evidence — the acceptance: an invalid id must leave the role untouched
+
+WORKER is role 3. Baseline, then the request, then the same query again:
+
+```sql
+$ select r.role_id, r.name, string_agg(p.code||'#'||p.permission_id, ',' order by p.permission_id)
+    from roles r left join role_permissions rp on rp.role_id=r.role_id
+    left join permissions p on p.permission_id=rp.permission_id
+   where r.role_id=3 group by r.role_id, r.name;
+
+ role_id |  name  |                      perms                        -- BEFORE
+---------+--------+-------------------------------------------------
+       3 | WORKER | view_dashboard#1,mark_task_done#4,log_feeding#9
+```
+```
+$ PUT /api/roles/3/permissions   [1,4,9,999]        # 999 does not exist
+{"success":false,"message":"Ruhusa hizi hazipo: 999. Hakuna kilichobadilishwa.",
+ "errorCode":"VALIDATION_ERROR"}
+HTTP 400
+```
+```sql
+ role_id |  name  |                      perms                        -- AFTER: identical
+---------+--------+-------------------------------------------------
+       3 | WORKER | view_dashboard#1,mark_task_done#4,log_feeding#9
+```
+
+`BAD_REQUEST` + `errorCode` ✓  role unchanged ✓
+
+#### Evidence — the case the old code got wrong
+
+`[1,999]` is a *shrinking* edit. The old code would have written `[view_dashboard]`, dropped two permissions, and answered `200`:
+
+```
+$ PUT /api/roles/3/permissions   [1,999]
+{"success":false,"message":"Ruhusa hizi hazipo: 999. Hakuna kilichobadilishwa.",
+ "errorCode":"VALIDATION_ERROR"}
+HTTP 400
+
+ role_id |  name  |                   perms                      -- still all three
+---------+--------+-------------------------------------------
+       3 | WORKER | view_dashboard,mark_task_done,log_feeding
+```
+
+#### Evidence — the rest of the surface
+
+```
+$ PUT /api/roles/3/permissions   [999,4,1000]      # several unknown, order kept
+{"…":"Ruhusa hizi hazipo: 999, 1000. Hakuna kilichobadilishwa.","errorCode":"VALIDATION_ERROR"}  HTTP 400
+
+$ PUT /api/roles/3/permissions   [1,null]
+{"…":"Orodha ya ruhusa ina thamani tupu (null). Hakuna kilichobadilishwa.","errorCode":"VALIDATION_ERROR"}  HTTP 400
+
+$ POST /api/roles  {"name":"BADROLE",…,"permissionIds":[1,999]}     # createRole, same rule
+{"…":"Ruhusa hizi hazipo: 999. Hakuna kilichobadilishwa.","errorCode":"VALIDATION_ERROR"}  HTTP 400
+   select count(*) from roles;  ->  4 before, 4 after — no role created
+```
+
+A valid edit still works, so D-13's own fix is not regressed:
+
+```
+$ PUT /api/roles/3/permissions   [1,4]
+{"success":true,"data":{"roleId":3,"name":"WORKER","permissions":["mark_task_done","view_dashboard"]}}  HTTP 200
+
+$ PUT /api/roles/3/permissions   [9,1,4,9,1]      # duplicates accepted, deduplicated
+{"success":true,"data":{"roleId":3,"name":"WORKER",
+ "permissions":["mark_task_done","log_feeding","view_dashboard"]}}  HTTP 200
+```
+
+WORKER was restored to its baseline by that last call — `role_permissions` is back to 21 rows and all four roles hold exactly what they held before this batch.
 
 ## D-14 — unmapped paths answered 500, not 404 · **fixed** (`056163a`)
 
@@ -388,6 +465,7 @@ All created through the real API (except the temporary species, which has no cre
 | Daily tasks 10–15 (3 per cycle) | ✅ deleted |
 | Species 3 "FIXTEST Nusu" (6.5 months, inserted by SQL for D-7) | ✅ deleted |
 | WORKER role permissions temporarily reduced to `view_dashboard` for F4 | ✅ restored via the same API |
+| WORKER role permissions reduced again on 2026-08-24, verifying the D-13 follow-up | ✅ restored via the same API (`role_permissions` back to 21) |
 
 **No cross-farm collateral this time** — that was the point of F1. Farm 2's unit 1 was verified untouched (`IDLE`, `updated_by` NULL) both immediately after the blocked attack and after cleanup.
 
@@ -422,7 +500,7 @@ Not reverted (harmless, not removable): sequence values for `farms`, `production
 
 # Open items
 
-1. **F3's REST-side errorCode** — flagged above; wider than the acceptance asked for. Say the word and I'll revert that part.
-2. **D-13 follow-up** — `findAllById` silently ignores unknown permission ids. Reject the request instead, or accept the partial assignment?
+1. ~~**F3's REST-side errorCode**~~ — **closed 2026-08-24: kept.** REST keeps sending `CONFLICT` / `VALIDATION_ERROR`, so one failure looks the same through either API.
+2. ~~**D-13 follow-up**~~ — **closed 2026-08-24 (`4b4c98e`): reject.** An unknown permission id fails the whole edit with `400 VALIDATION_ERROR` and leaves the role untouched. Evidence under D-13 above.
 3. **Nothing else from the audit was touched.** Still open and out of scope for this batch, as instructed: D-4 (frontend GraphQL error handling — the next, frontend batch), Daily Tasks read/complete/assign + reminders scheduler, correction/reversal mutations, multi-farm switching, and the absent modules (Water Quality, Finance, Assets).
-4. **Not merged.** The branch is `fix/post-audit-backend-batch`, 11 commits ahead of `main`, unpushed.
+4. **Merged 2026-08-24.** `fix/post-audit-backend-batch` (14 commits) was merged into `main`. Nothing is pushed — `main` is now 23 commits ahead of `origin/main`.
