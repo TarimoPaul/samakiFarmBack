@@ -24,6 +24,17 @@ import org.springframework.stereotype.Component;
 public class PermissionChecker {
 
     /**
+     * Ruhusa inayogeuza usimamizi wa wanachama kuwa wa KAMPUNI NZIMA badala
+     * ya shamba moja.
+     *
+     * Haikuongezwi hapa kama ruhusa mpya: ni ile ile inayomruhusu mtu
+     * kuunda na kuorodhesha mashamba YOTE (angalia FarmController). Aliye
+     * na mamlaka ya kupanga mashamba ya kampuni lazima aweze kupanga watu
+     * ndani yake - vinginevyo angeunda shamba asiloweza kuliwekea mtu.
+     */
+    private static final String COMPANY_WIDE_PERMISSION = "manage_farms";
+
+    /**
      * Mtumiaji wa ombi la sasa.
      *
      * Inatupa UnauthorizedException (401, UNAUTHENTICATED) - SI
@@ -58,21 +69,41 @@ public class PermissionChecker {
 
     /**
      * OPERESHENI ZA USIMAMIZI - farmId iliyoombwa lazima ilingane na shamba
-     * la mtumiaji, ISIPOKUWA ROOT anayeruhusiwa kuvuka mashamba yote.
+     * la mtumiaji, ISIPOKUWA wenye mamlaka ya kampuni nzima.
      *
      * Inatumika pale farmId inapotoka kwa mteja kama sehemu ya ombi la
      * USIMAMIZI: kumweka mtu kwenye shamba, kubadilisha role yake,
      * kuorodhesha watu wa shamba (angalia FarmUserService/UserService).
-     * ROOT LAZIMA aweze kufanya hizi - ndiye anayeanzisha shamba jipya na
-     * kumweka mmiliki wake wa kwanza; bila bypass hii hakuna njia ya
-     * kuanzisha mfumo kabisa.
+     *
+     * NGAZI MBILI, zinazotofautishwa na ruhusa PEKEE:
+     *
+     *  - 'manage_users' TU  -> shamba LAKE pekee. Huyu ni msimamizi wa
+     *    shamba: anapanga watu wa shamba lake, na farmId nyingine yoyote
+     *    ni 403.
+     *  - 'manage_farms'     -> shamba LOLOTE. Huyu ni msimamizi wa kampuni.
+     *    Ni sheria ile ile iliyokwisha kuwepo kwa GET /api/farms (anaona
+     *    mashamba yote); hapa inapanuliwa kwa wanachama wake.
+     *  - ROOT               -> shamba lolote, kama ilivyokuwa. (hasPermission
+     *    yenyewe inampitisha ROOT, lakini isRoot() imeandikwa wazi hapa ili
+     *    nia isitegemee undani wa AuthenticatedUser.) ROOT LAZIMA aweze
+     *    kufanya hizi - ndiye anayeanzisha shamba jipya na kumweka mmiliki
+     *    wake wa kwanza; bila bypass hii hakuna njia ya kuanzisha mfumo.
+     *
+     * Ukaguzi upo HAPA, si kwenye kila endpoint, kwa sababu ile ile ya
+     * requireResourceInCallersFarm hapo chini: endpoint mpya ya wanachama
+     * inaita method hii hii badala ya kunakili - au kusahau - sheria.
      *
      * KWA DATA YA UZALISHAJI tumia requireResourceInCallersFarm(...) badala
-     * yake - ina sheria TOFAUTI kwa makusudi (angalia hapo chini).
+     * yake - ina sheria TOFAUTI kwa makusudi (angalia hapo chini). Ruhusa ya
+     * kampuni HAIFUNGUI data ya uzalishaji ya shamba lingine; inafungua
+     * usimamizi wa wanachama pekee (angalia FRONTEND_BACKEND_AUDIT.md, D-1).
      */
     public void requireSameFarm(Integer requestedFarmId) {
         AuthenticatedUser user = currentUser();
-        if (!user.isRoot() && !requestedFarmId.equals(user.getFarmId())) {
+        if (user.isRoot() || user.hasPermission(COMPANY_WIDE_PERMISSION)) {
+            return;
+        }
+        if (!requestedFarmId.equals(user.getFarmId())) {
             throw new AccessDeniedException("Huruhusiwi kufikia shamba hili.");
         }
     }
