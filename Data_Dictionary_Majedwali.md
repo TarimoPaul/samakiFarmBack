@@ -4,7 +4,7 @@
 > Chanzo: database halisi. Izalishe upya baada ya kila migration:
 > `./tools/generate-docs.ps1`
 >
-> Toleo la 2026-08-22. Jedwali: **21**. Safu: **201**.
+> Toleo la 2026-08-24. Jedwali: **21**. Safu: **201**.
 
 ## Migrations zilizotumika
 
@@ -16,6 +16,7 @@
 - **V6** - user account lifecycle _(2026-08-22)_
 - **V7** - auth permissions _(2026-08-22)_
 - **V8** - feed module _(2026-08-22)_
+- **V9** - farm name unique _(2026-08-24)_
 
 ## Muhtasari
 
@@ -173,6 +174,7 @@
 
 **Vikwazo:**
 
+- **UNIQUE** `uq_farms_name` - UNIQUE (name)
 - **PK** `farms_pkey` - PRIMARY KEY (farm_id)
 - **FK** `farms_deleted_by_fkey` - FOREIGN KEY (deleted_by) REFERENCES users(user_id)
 - **FK** `farms_owner_user_id_fkey` - FOREIGN KEY (owner_user_id) REFERENCES users(user_id)

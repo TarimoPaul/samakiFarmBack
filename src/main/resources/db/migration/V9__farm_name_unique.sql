@@ -1,0 +1,23 @@
+-- ============================================================
+-- Jina la shamba ni la KIPEKEE.
+--
+-- Bila kikwazo hiki, POST /api/farms iliruhusu mashamba mawili
+-- yenye jina moja kabisa, hivyo tawi la CONFLICT lililokwisha
+-- kuandikwa kwenye UI halikuwa linafikika kamwe.
+--
+-- HAKUNA msimbo wa Java unaohitajika: ukiukwaji unakuja kama
+-- DataIntegrityViolationException, na GlobalExceptionHandler
+-- inaugeuza kuwa 409 + errorCode CONFLICT (angalia
+-- handleDataIntegrity) - ndio ule ule GraphQL inaoutuma.
+--
+-- UNIQUE ya kawaida, si partial index ya `WHERE is_deleted = false`:
+-- farms ina safu za soft-delete (V2) lakini HAKUNA endpoint ya
+-- kufuta shamba, hivyo hakuna shamba lililofutwa la kushindana
+-- nalo. Ni sheria ile ile ya production_units (V1) - UNIQUE ya
+-- kawaida. Endpoint ya kufuta ikija, hapo ndipo hii igeuzwe kuwa
+-- partial index.
+--
+-- MUHIMU: migration hii INASHINDWA kama DB ina majina rudufu.
+-- Yasafishwe kwanza.
+-- ============================================================
+ALTER TABLE farms ADD CONSTRAINT uq_farms_name UNIQUE (name);
