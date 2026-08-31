@@ -162,7 +162,10 @@ public class PermissionChecker {
         if (user.getFarmId() == null) {
             throw new ForbiddenException(
                     user.isRoot()
-                            ? "ROOT hana shamba; tumia akaunti ya shamba husika."
+                            // ROOT ANAWEZA kujipa muktadha: kichwa X-Farm-Id
+                            // (angalia JwtAuthFilter.withSelectedFarm). Ujumbe
+                            // unautaja kwa sababu ndio kitendo kinachofuata.
+                            ? "ROOT hajachagua shamba; chagua shamba kwanza (X-Farm-Id)."
                             : "Bado hujapangiwa shamba lolote. Wasiliana na msimamizi.",
                     ErrorCodes.NO_FARM_CONTEXT);
         }

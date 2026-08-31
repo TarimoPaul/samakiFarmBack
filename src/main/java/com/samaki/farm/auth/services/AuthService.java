@@ -245,7 +245,7 @@ public class AuthService {
 
         return new MeResponse(user.getUserId().toString(), user.getName(), user.getPhone(),
                 user.getStatus().name(), principal.getFarmId(), principal.getRoleName(),
-                permissions);
+                permissions, principal.isRoot());
     }
 
     /**

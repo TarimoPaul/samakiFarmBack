@@ -46,7 +46,11 @@ public class SecurityConfig {
         CorsConfiguration config = new CorsConfiguration();
         config.setAllowedOrigins(List.of(allowedOrigins.split(",")));
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-        config.setAllowedHeaders(List.of("Authorization", "Content-Type"));
+        // X-Farm-Id ni kichwa cha kawaida (si "simple header"), hivyo bila
+        // kuwepo hapa browser ingekataa OMBI LENYEWE kwenye preflight -
+        // uchaguzi wa shamba wa ROOT usingefanya kazi kabisa kutoka UI, ilhali
+        // curl ingeonekana kufanya kazi vizuri (angalia JwtAuthFilter).
+        config.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-Farm-Id"));
         config.setAllowCredentials(true);
         config.setMaxAge(3600L);
 

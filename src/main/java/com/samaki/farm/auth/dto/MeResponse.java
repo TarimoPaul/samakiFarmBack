@@ -15,6 +15,17 @@ import java.util.List;
  *
  * Sehemu nyingine ni zilezile za UserSummary, ili skrini zisilazimike
  * kuunganisha majibu mawili.
+ *
+ * {@code farmId} ni shamba LINALOTUMIKA sasa hivi - likiwemo lile ROOT
+ * alilochagua kwa kichwa X-Farm-Id (angalia JwtAuthFilter.withSelectedFarm).
+ * Hivyo mteja anaweza kuliamini kama jibu la "ombi langu linafanyiwa kazi
+ * kwenye shamba gani", si kama nakala ya uanachama wake.
+ *
+ * {@code canSelectFarm} ni ruhusa ya kuchagua shamba asilolimiliki. UI haiwezi
+ * kuipata yenyewe: mara ROOT anapochagua shamba, farmId yake huacha kuwa
+ * null na kigezo cha "hana shamba" hakitofautishi tena ROOT na mwanachama
+ * wa kawaida - kisha kiteuzi kingetoweka mara tu kinapotumika.
  */
 public record MeResponse(String id, String name, String phone, String status,
-                          Integer farmId, String role, List<String> permissions) {}
+                          Integer farmId, String role, List<String> permissions,
+                          boolean canSelectFarm) {}

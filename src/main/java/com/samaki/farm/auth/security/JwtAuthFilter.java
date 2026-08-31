@@ -3,6 +3,7 @@ package com.samaki.farm.auth.security;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.samaki.farm.common.exception.ErrorCodes;
 import com.samaki.farm.common.web.ApiResponse;
+import com.samaki.farm.farm.repository.FarmRepository;
 import com.samaki.farm.farmuser.entity.FarmUser;
 import com.samaki.farm.farmuser.repository.FarmUserRepository;
 import com.samaki.farm.rbac.entity.Permission;
@@ -56,6 +57,15 @@ public class JwtAuthFilter extends OncePerRequestFilter {
     private static final Logger logger = LoggerFactory.getLogger(JwtAuthFilter.class);
     private static final String ROLE_PREFIX = "ROLE_";
 
+    /**
+     * Kichwa kinachomruhusu ROOT kusema "kwa ombi hili, shamba langu ni hili".
+     *
+     * Angalia withSelectedFarm hapo chini kwa sheria kamili. Jina lipo hapa
+     * kwa sababu SecurityConfig nayo LAZIMA ilitaje kwenye allowedHeaders -
+     * vinginevyo CORS ingelizuia kabla halijafika hapa.
+     */
+    private static final String FARM_HEADER = "X-Farm-Id";
+
     // Cache ya authorities za ROOT (ROOT ana ruhusa ZOTE zilizopo DB-ni)
     private static volatile Set<GrantedAuthority> cachedRootAuthorities = null;
     private static volatile long rootCacheTimestamp = 0;
@@ -106,17 +116,19 @@ public class JwtAuthFilter extends OncePerRequestFilter {
     private final JwtUtil jwtUtil;
     private final UserRepository userRepository;
     private final FarmUserRepository farmUserRepository;
+    private final FarmRepository farmRepository;
     private final PermissionRepository permissionRepository;
     private final RoleRepository roleRepository;
     private final ObjectMapper objectMapper;
 
     public JwtAuthFilter(JwtUtil jwtUtil, UserRepository userRepository,
-                          FarmUserRepository farmUserRepository,
+                          FarmUserRepository farmUserRepository, FarmRepository farmRepository,
                           PermissionRepository permissionRepository, RoleRepository roleRepository,
                           ObjectMapper objectMapper) {
         this.jwtUtil = jwtUtil;
         this.userRepository = userRepository;
         this.farmUserRepository = farmUserRepository;
+        this.farmRepository = farmRepository;
         this.permissionRepository = permissionRepository;
         this.roleRepository = roleRepository;
         this.objectMapper = objectMapper;
@@ -138,7 +150,10 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             Claims claims = jwtUtil.parseToken(header.substring(7));
             UUID userId = UUID.fromString(claims.getSubject());
 
-            account = resolveAccount(userId);
+            // Shamba teule linawekwa BAADA ya cache na KABLA ya authorities:
+            // cache haipaswi kubeba uchaguzi wa ombi moja, na authorities za
+            // ROOT hazitegemei shamba hata kidogo.
+            account = withSelectedFarm(resolveAccount(userId), request);
             // isRoot inatoka DB (si claim ya token): mtu aliyeondolewa uroot
             // anapoteza ufikiaji papo hapo badala ya kusubiri token iishe.
             authorities = account.principal().isRoot()
@@ -189,6 +204,64 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         var authentication = new UsernamePasswordAuthenticationToken(account.principal(), null, authorities);
         SecurityContextHolder.getContext().setAuthentication(authentication);
         filterChain.doFilter(request, response);
+    }
+
+    /**
+     * Shamba alilochagua ROOT kwa kichwa X-Farm-Id, likiwekwa kwenye principal.
+     *
+     * SABABU: ROOT hana uanachama, hivyo hana farmId, na kila njia ya data ya
+     * uzalishaji hupitia PermissionChecker.requireFarmContext() ambayo humjibu
+     * NO_FARM_CONTEXT. Matokeo yake ROOT - msimamizi mkuu wa mfumo - ndiye
+     * pekee asiyeweza kuona dashibodi ya shamba lolote (angalia
+     * FRONTEND_BACKEND_AUDIT.md, D-9). Uchaguzi huu ndio unaompa muktadha huo,
+     * kwa OMBI MOJA: hakuna kinachohifadhiwa DB-ni wala ndani ya token, hivyo
+     * ombi lisilo na kichwa hiki linabaki kama lilivyokuwa kabisa.
+     *
+     * Hii HAIVUNJI sheria ya requireResourceInCallersFarm ("anayefanya kazi
+     * kwenye data ya shamba LAZIMA awe na shamba"): sababu ya sheria ile ni
+     * kwamba shamba la ROOT halijulikani, na hapa limetajwa wazi na ROOT
+     * mwenyewe.
+     *
+     * ROOT PEKEE. Mwenye 'manage_farms' asiye ROOT haruhusiwi kuchagua shamba
+     * lingine: ruhusa ya kampuni inafungua USIMAMIZI wa wanachama, SI data ya
+     * uzalishaji ya shamba lingine - ndiyo tofauti ya makusudi kati ya
+     * requireSameFarm na requireResourceInCallersFarm (na D-1). Kwa asiye
+     * ROOT kichwa hiki hakina athari yoyote.
+     *
+     * Shamba lisilopo (au lililofutwa) linapuuzwa badala ya kukataliwa: jibu
+     * linabaki lilelile ambalo ROOT asiyechagua chochote hupata
+     * (NO_FARM_CONTEXT), hivyo mteja mwenye uchaguzi wa zamani - shamba
+     * lililofutwa, mfano - haifungiwi nje ya mfumo mzima; anaona tu kwamba
+     * hakuna shamba lililochaguliwa. Uthibitisho ni existsByFarmId (derived
+     * query), hivyo shamba lililofutwa halipiti.
+     */
+    private Account withSelectedFarm(Account account, HttpServletRequest request) {
+        AuthenticatedUser principal = account.principal();
+        if (!principal.isRoot()) {
+            return account;
+        }
+
+        Integer farmId = parseFarmHeader(request.getHeader(FARM_HEADER));
+        if (farmId == null || !farmRepository.existsByFarmId(farmId)) {
+            return account;
+        }
+
+        AuthenticatedUser selected = new AuthenticatedUser(principal.getUserId(), farmId,
+                principal.getRoleId(), principal.getRoleName(), principal.getPermissions(), true);
+        return new Account(selected, account.status(), account.mustChangePassword());
+    }
+
+    /** Kichwa kisicho namba kinapuuzwa - ni kichwa cha hiari, si sehemu ya ombi. */
+    private Integer parseFarmHeader(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return null;
+        }
+        try {
+            return Integer.valueOf(raw.trim());
+        } catch (NumberFormatException e) {
+            logger.debug("X-Farm-Id si namba: {}", raw);
+            return null;
+        }
     }
 
     /** Ombi liko kwenye /api/auth/** - halizuiwi na must_change_password. */
