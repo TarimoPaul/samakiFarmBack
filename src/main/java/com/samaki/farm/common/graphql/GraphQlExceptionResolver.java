@@ -66,8 +66,14 @@ public class GraphQlExceptionResolver extends DataFetcherExceptionResolverAdapte
         if (ex instanceof UnauthorizedException ue) {
             return error(ex, env, ErrorType.UNAUTHORIZED, ue.getErrorCode());
         }
-        if (ex instanceof ConflictException) {
-            return error(ex, env, ErrorType.BAD_REQUEST, ErrorCodes.CONFLICT);
+        // Msimbo unatoka kwenye exception yenyewe, si CONFLICT ya jumla:
+        // conflict ya kawaida bado inarudisha CONFLICT (ndio chaguo-msingi
+        // la ConflictException), lakini ile yenye maana mahususi - mfano
+        // OWNER_IMMUTABLE - inaufikisha msimbo wake kwa mteja. Ni sharti
+        // API zote mbili zikubaliane: REST inafanya vivyo hivyo tangu
+        // GlobalExceptionHandler.handleConflict.
+        if (ex instanceof ConflictException ce) {
+            return error(ex, env, ErrorType.BAD_REQUEST, ce.getErrorCode());
         }
         if (ex instanceof TooManyRequestsException) {
             return error(ex, env, ErrorType.BAD_REQUEST, ErrorCodes.TOO_MANY_REQUESTS);

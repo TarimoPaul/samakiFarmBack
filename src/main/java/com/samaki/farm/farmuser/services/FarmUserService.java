@@ -3,6 +3,7 @@ package com.samaki.farm.farmuser.services;
 import com.samaki.farm.auth.security.JwtAuthFilter;
 import com.samaki.farm.auth.security.PermissionChecker;
 import com.samaki.farm.common.exception.ConflictException;
+import com.samaki.farm.common.exception.ErrorCodes;
 import com.samaki.farm.farm.entity.Farm;
 import com.samaki.farm.farm.repository.FarmRepository;
 import com.samaki.farm.farmuser.entity.FarmUser;
@@ -92,7 +93,11 @@ public class FarmUserService {
 
         Farm farm = membership.getFarm();
         if (farm.getOwner() != null && userId.equals(farm.getOwner().getUserId())) {
-            throw new ConflictException("Mmiliki wa shamba hawezi kutolewa kwenye shamba lake.");
+            // Msimbo mahususi: hiki si kigongano kinachoweza kurekebishwa na
+            // kujaribiwa tena (kama rudufu), ni sheria isiyobadilika kwa mtu
+            // huyu kwenye shamba hili. Ujumbe ni ule ule uliokuwepo.
+            throw new ConflictException("Mmiliki wa shamba hawezi kutolewa kwenye shamba lake.",
+                    ErrorCodes.OWNER_IMMUTABLE);
         }
 
         membership.softDelete(permissionChecker.currentUser().getUserId());

@@ -93,6 +93,22 @@ public final class ErrorCodes {
     public static final String CONFLICT = "CONFLICT";
 
     /**
+     * 409 - mmiliki wa shamba hawezi kutolewa kwenye shamba lake
+     * (FarmUserService.removeMembership).
+     *
+     * Ni CONFLICT yenye maana MAHUSUSI. Ipo kama msimbo wake kwa sababu
+     * ndicho kikwazo pekee cha kudumu kwenye uanachama, na frontend
+     * inahitaji kutofautisha "hii haitawezekana kamwe kwa mtu huyu" na
+     * rudufu ya kawaida ambayo mtumiaji anaweza kuirekebisha na kujaribu
+     * tena. Ujumbe wa Kiswahili unabaki ule ule - unaeleza NINI, msimbo
+     * unaeleza AINA.
+     *
+     * Mteja anayejua CONFLICT pekee bado anafanya kazi: 409 ni ile ile,
+     * na msimbo huu ni nyongeza, si mbadala.
+     */
+    public static final String OWNER_IMMUTABLE = "OWNER_IMMUTABLE";
+
+    /**
      * 400 - data iliyotumwa haikubaliki kibiashara (kiasi hasi, tarehe
      * isiyosomeka, kitambulisho kisichojulikana).
      *

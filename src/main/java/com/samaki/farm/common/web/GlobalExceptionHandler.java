@@ -91,9 +91,27 @@ public class GlobalExceptionHandler {
     // AuthService inatupa ConflictException/UnauthorizedException, na hapa
     // ndipo zinapopewa status codes zile zile zilizokuwa zikirudishwa kwa
     // mkono na AuthController (409/401).
+    /**
+     * UJUMBE HAUBADILIKI - msimbo ndio nyongeza.
+     *
+     * Hii ilikuwa hitilafu PEKEE ya backend hii inayorudi bila errorCode,
+     * ilhali sheria iliyotangazwa kwa frontend ni "tawi kwa errorCode,
+     * KAMWE si kwa ujumbe". Matokeo yake skrini za Members na Approvals
+     * zililazimika kutawi kwa status 409 - njia tofauti na hitilafu
+     * nyingine zote (angalia CONFLICT_STATUS kwenye repo ya frontend).
+     *
+     * Ni salama kwa mteja aliyepo: status inabaki 409 na ujumbe ni ule
+     * ule, hivyo tawi la sasa la frontend linaendelea kufanya kazi bila
+     * kubadilishwa. errorCode ni safu ya NYONGEZA.
+     *
+     * Msimbo unatoka kwenye exception yenyewe (ConflictException), hivyo
+     * conflict ya kawaida inapata CONFLICT na ile ya mmiliki inapata
+     * OWNER_IMMUTABLE - bila kila endpoint kuandika logic yake.
+     */
     @ExceptionHandler(ConflictException.class)
     public ResponseEntity<ApiResponse<Void>> handleConflict(ConflictException ex) {
-        return ResponseEntity.status(HttpStatus.CONFLICT).body(ApiResponse.error(ex.getMessage()));
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(ApiResponse.error(ex.getMessage(), ex.getErrorCode()));
     }
 
     // errorCode inapitishwa hapa: frontend inatawi kwa msimbo
