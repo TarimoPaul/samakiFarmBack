@@ -30,3 +30,9 @@ WORKER,log_feeding
 
 # VIEWER - ripoti tu, hana uwezo wa kubadilisha chochote
 VIEWER,view_dashboard
+
+# Ubora wa maji - kupima ni kazi ya shambani (kama kulisha), hivyo WORKER
+# anaipata. VIEWER hapati: yeye ni ripoti tu.
+OWNER,log_water_quality
+FARM_MANAGER,log_water_quality
+WORKER,log_water_quality

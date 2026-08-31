@@ -10,6 +10,12 @@ type Query {
     feedingLogs(cycleId: Int): [FeedingLog!]!
     feedStockMovements: [FeedStockMovement!]!
     feedStockBalance: Float!
+
+    # ---------- Water Quality ----------
+    # Bila hoja: vipimo vya shamba zima. unitId: tanki moja. cycleId:
+    # vipimo vya tanki analomoendeshea mzunguko huo (jedwali halina
+    # cycle_id - angalia WaterQualityService).
+    waterQualityLogs(unitId: Int, cycleId: Int): [WaterQualityLog!]!
 }
 
 type Mutation {
@@ -19,6 +25,9 @@ type Mutation {
     # ---------- Feed ----------
     recordFeedPurchase(input: RecordFeedPurchaseInput!): FeedPurchase!
     logFeeding(input: LogFeedingInput!): FeedingLog!
+
+    # ---------- Water Quality ----------
+    logWaterQuality(input: LogWaterQualityInput!): WaterQualityLog!
 }
 
 type ProductionUnit {
@@ -118,5 +127,43 @@ type FeedStockMovement {
     movedAt: String!
 }
 
-# Moduli zilizobaki (WaterQuality, DailyTasks, Finance) zitaongezwa hapa
-# kwa muundo uleule - angalia SRS §8 kwa orodha kamili.
+# ============================================================
+# Water Quality — vipimo vya maji kwenye kitengo
+#
+# Kipimo ni cha KITENGO, si cha mzunguko (water_quality_logs.unit_id):
+# maji ni mali ya tanki, si ya samaki walioko ndani yake msimu huu.
+#
+# Vipimo vyote vitatu vinaweza kuwa null - mtu mwenye kipima-pH pekee
+# anarekodi pH, na kuacha nyingine wazi ni sahihi zaidi kuliko sifuri.
+#
+# THAMANI MBAYA INAKUBALIWA. Oksijeni 0.8, pH 4.2 - hizi ndizo sababu
+# ya kupima. Kinachokataliwa ni kisichowezekana kimuundo pekee: pH nje
+# ya 0-14, oksijeni hasi (angalia WaterQualityService).
+# ============================================================
+
+type WaterQualityLog {
+    logId: ID!
+    unit: ProductionUnit!
+    logDate: String!
+    # 0.0 - 14.0
+    ph: Float
+    # Nyuzi Selsiasi
+    temperature: Float
+    # Oksijeni iliyoyeyuka (DO), mg/L
+    oxygen: Float
+    notes: String
+    recordedByName: String
+}
+
+input LogWaterQualityInput {
+    unitId: Int!
+    # Ikiachwa wazi, inatumia leo
+    logDate: String
+    ph: Float
+    temperature: Float
+    oxygen: Float
+    notes: String
+}
+
+# Moduli zilizobaki (DailyTasks, Finance) zitaongezwa hapa kwa muundo
+# uleule - angalia SRS §8 kwa orodha kamili.

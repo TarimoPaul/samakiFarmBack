@@ -14,3 +14,6 @@ view_finance,FINANCE,REPORTING,Kuona gharama/mauzo/faida
 # ==================== UAA MODULE ====================
 manage_users,UAA,USER_MANAGEMENT,Kusimamia watumiaji/roles/ruhusa
 approve_users,UAA,USER_MANAGEMENT,Kuidhinisha watumiaji waliojisajili
+
+# ==================== WATER QUALITY ====================
+log_water_quality,FARM,WATER,Kurekodi vipimo vya ubora wa maji
