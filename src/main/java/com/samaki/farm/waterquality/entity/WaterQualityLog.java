@@ -58,6 +58,15 @@ public class WaterQualityLog extends BaseEntity {
     /** numeric(4,1) - hewa ya oksijeni iliyoyeyuka (DO), mg/L. */
     private BigDecimal oxygen;
 
+    /**
+     * numeric(4,2) - amonia jumla (NH3 + NH4+), mg/L.
+     *
+     * Desimali MBILI, tofauti na vipimo vingine: 0.02 ni salama na 0.25
+     * inaua polepole, hivyo desimali moja ingefuta tofauti inayoamua
+     * (angalia V11__water_quality_ammonia.sql).
+     */
+    private BigDecimal ammonia;
+
     @Column(name = "notes")
     private String notes;
 

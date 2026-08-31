@@ -3,7 +3,7 @@ package com.samaki.farm.waterquality.dto;
 /**
  * Kipimo kimoja kinachorekodiwa.
  *
- * Vipimo vyote vitatu vinaruhusiwa kuwa null kwa sababu safu zake ni
+ * Vipimo vyote vinne vinaruhusiwa kuwa null kwa sababu safu zake ni
  * nullable kwenye schema, na hivyo ndivyo shambani ilivyo: mtu mwenye
  * kipima-pH pekee anarekodi pH, na kuacha nyingine wazi ni sahihi zaidi
  * kuliko kuandika sifuri.
@@ -16,5 +16,6 @@ public record LogWaterQualityInput(
         Double ph,
         Double temperature,
         Double oxygen,
+        Double ammonia,
         String notes
 ) {}

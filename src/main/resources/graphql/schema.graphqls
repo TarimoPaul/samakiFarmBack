@@ -133,12 +133,13 @@ type FeedStockMovement {
 # Kipimo ni cha KITENGO, si cha mzunguko (water_quality_logs.unit_id):
 # maji ni mali ya tanki, si ya samaki walioko ndani yake msimu huu.
 #
-# Vipimo vyote vitatu vinaweza kuwa null - mtu mwenye kipima-pH pekee
+# Vipimo vyote vinne vinaweza kuwa null - mtu mwenye kipima-pH pekee
 # anarekodi pH, na kuacha nyingine wazi ni sahihi zaidi kuliko sifuri.
 #
-# THAMANI MBAYA INAKUBALIWA. Oksijeni 0.8, pH 4.2 - hizi ndizo sababu
-# ya kupima. Kinachokataliwa ni kisichowezekana kimuundo pekee: pH nje
-# ya 0-14, oksijeni hasi (angalia WaterQualityService).
+# THAMANI MBAYA INAKUBALIWA. Oksijeni 0.8, pH 4.2, amonia 0.9 - hizi
+# ndizo sababu ya kupima, na amonia ndiyo chanzo kikuu cha vifo vya
+# ghafla. Kinachokataliwa ni kisichowezekana kimuundo pekee: pH nje ya
+# 0-14, oksijeni au amonia hasi (angalia WaterQualityService).
 # ============================================================
 
 type WaterQualityLog {
@@ -151,6 +152,9 @@ type WaterQualityLog {
     temperature: Float
     # Oksijeni iliyoyeyuka (DO), mg/L
     oxygen: Float
+    # Amonia jumla (NH3 + NH4+), mg/L. Desimali mbili: 0.02 ni salama,
+    # 0.25 inaua polepole.
+    ammonia: Float
     notes: String
     recordedByName: String
 }
@@ -162,6 +166,7 @@ input LogWaterQualityInput {
     ph: Float
     temperature: Float
     oxygen: Float
+    ammonia: Float
     notes: String
 }
 

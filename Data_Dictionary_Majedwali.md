@@ -4,7 +4,7 @@
 > Chanzo: database halisi. Izalishe upya baada ya kila migration:
 > `./tools/generate-docs.ps1`
 >
-> Toleo la 2026-08-24. Jedwali: **21**. Safu: **201**.
+> Toleo la 2026-08-31. Jedwali: **21**. Safu: **208**.
 
 ## Migrations zilizotumika
 
@@ -17,6 +17,8 @@
 - **V7** - auth permissions _(2026-08-22)_
 - **V8** - feed module _(2026-08-22)_
 - **V9** - farm name unique _(2026-08-24)_
+- **V10** - water quality module _(2026-08-31)_
+- **V11** - water quality ammonia _(2026-08-31)_
 
 ## Muhtasari
 
@@ -425,12 +427,21 @@
 | `oxygen` | numeric(4,1) |  |  |
 | `notes` | text |  |  |
 | `recorded_by_user_id` | uuid |  |  |
+| `created_at` | timestamptz | NOT NULL | now() |
+| `updated_at` | timestamptz |  |  |
+| `deleted_at` | timestamptz |  |  |
+| `is_deleted` | boolean | NOT NULL | false |
+| `updated_by` | uuid |  |  |
+| `deleted_by` | uuid |  |  |
+| `ammonia` | numeric(4,2) |  |  |
 
 **Vikwazo:**
 
 - **PK** `water_quality_logs_pkey` - PRIMARY KEY (log_id)
+- **FK** `water_quality_logs_deleted_by_fkey` - FOREIGN KEY (deleted_by) REFERENCES users(user_id)
 - **FK** `water_quality_logs_recorded_by_user_id_fkey` - FOREIGN KEY (recorded_by_user_id) REFERENCES users(user_id)
 - **FK** `water_quality_logs_unit_id_fkey` - FOREIGN KEY (unit_id) REFERENCES production_units(unit_id) ON DELETE CASCADE
+- **FK** `water_quality_logs_updated_by_fkey` - FOREIGN KEY (updated_by) REFERENCES users(user_id)
 
 **Index:**
 

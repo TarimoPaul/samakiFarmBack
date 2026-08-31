@@ -47,6 +47,9 @@ public class WaterQualityService {
     /** numeric(4,1): tarakimu nne, moja ikiwa ya desimali. */
     private static final BigDecimal NUMERIC_4_1_MAX = new BigDecimal("999.9");
 
+    /** numeric(4,2): tarakimu nne, mbili zikiwa za desimali - amonia. */
+    private static final BigDecimal NUMERIC_4_2_MAX = new BigDecimal("99.99");
+
     private final WaterQualityLogRepository logRepository;
     private final ProductionUnitRepository unitRepository;
     private final CycleRepository cycleRepository;
@@ -104,8 +107,11 @@ public class WaterQualityService {
         log.setUnit(unit);
         log.setLogDate(parseDate(input.logDate()));
         log.setPh(ph(input.ph()));
-        log.setTemperature(measurement(input.temperature(), "Joto la maji", true));
-        log.setOxygen(measurement(input.oxygen(), "Oksijeni", false));
+        log.setTemperature(measurement(input.temperature(), "Joto la maji", true, NUMERIC_4_1_MAX));
+        log.setOxygen(measurement(input.oxygen(), "Oksijeni", false, NUMERIC_4_1_MAX));
+        // Amonia kubwa INAKUBALIWA - 0.9 mg/L ni sumu inayoua, na ndiyo
+        // sababu hasa ya kupima. Kinachokataliwa ni hasi pekee.
+        log.setAmmonia(measurement(input.ammonia(), "Amonia", false, NUMERIC_4_2_MAX));
         log.setNotes(input.notes());
         log.setRecordedBy(currentUser());
 
@@ -161,15 +167,18 @@ public class WaterQualityService {
     }
 
     /**
-     * Vipimo vya numeric(4,1).
+     * Kipimo cha namba, kikikaguliwa kimuundo pekee.
      *
      * `allowNegative` ni ya joto pekee: maji baridi kuliko sifuri ni
-     * kipimo halali kutokea, ilhali oksijeni hasi si kipimo bali kosa.
-     * Ukomo wa 999.9 ni uwezo wa safu, si maoni kuhusu thamani nzuri -
-     * bila hiyo, thamani kubwa ingerudi kama INTERNAL_ERROR ya database
-     * badala ya jibu linaloeleweka.
+     * kipimo halali kutokea, ilhali oksijeni au amonia hasi si kipimo
+     * bali kosa.
+     *
+     * `max` ni uwezo wa SAFU (999.9 kwa numeric(4,1), 99.99 kwa
+     * numeric(4,2)), si maoni kuhusu thamani nzuri - bila hiyo, thamani
+     * kubwa ingerudi kama INTERNAL_ERROR ya database badala ya jibu
+     * linaloeleweka. HAKUNA ukomo wa kiafya popote hapa.
      */
-    private BigDecimal measurement(Double value, String jina, boolean allowNegative) {
+    private BigDecimal measurement(Double value, String jina, boolean allowNegative, BigDecimal max) {
         if (value == null) {
             return null;
         }
@@ -177,7 +186,7 @@ public class WaterQualityService {
             throw new IllegalArgumentException("Thamani ya '" + jina + "' haiwezi kuwa hasi.");
         }
         BigDecimal decimal = BigDecimal.valueOf(value);
-        if (decimal.abs().compareTo(NUMERIC_4_1_MAX) > 0) {
+        if (decimal.abs().compareTo(max) > 0) {
             throw new IllegalArgumentException(
                     "Thamani ya '" + jina + "' ni kubwa kuliko kipimo kinavyoweza kuhifadhiwa.");
         }
