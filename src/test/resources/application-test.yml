@@ -1,0 +1,36 @@
+# ============================================================
+# Profile ya MAJARIBIO.
+#
+# spring.datasource.* HAIWEKWI hapa kwa makusudi: URL ya database ya
+# majaribio inatengenezwa wakati wa run (jina lina sehemu ya nasibu) na
+# inawekwa na @DynamicPropertySource - angalia TestDatabase.
+#
+# HAKUNA SIRI hapa. DB_USER/DB_PASSWORD/JWT_SECRET zinatoka environment
+# variables au `.env` (haiingii kwenye git), sawa na app yenyewe.
+# ============================================================
+spring:
+  jpa:
+    hibernate:
+      # Flyway ndiyo inayosimamia schema hata kwenye majaribio - hiyo
+      # ndiyo sababu ya harness hii kuwepo. `validate` inahakikisha
+      # entity zinalingana na schema iliyotengenezwa na V1->V11.
+      ddl-auto: validate
+    show-sql: false
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    # `clean` ndiyo njia ya kutenganisha tests (angalia IntegrationTest).
+    # Imezimwa kwa chaguo-msingi na Flyway kwa sababu nzuri kabisa -
+    # inafuta KILA kitu - hivyo inawashwa HAPA PEKEE, kwenye profile ya
+    # majaribio, na IntegrationTest.guardTestDatabase() inakataa kuiita
+    # isipokuwa database inaitwa `samaki_test_...`.
+    clean-disabled: false
+
+app:
+  data:
+    initialize: true
+
+logging:
+  level:
+    org.hibernate.SQL: warn
+    org.springframework.web: warn
