@@ -118,6 +118,29 @@ Kwenye production hakuna `.env` — weka **environment variables halisi**, ambaz
 
 Flyway inaendesha migrations kiotomatiki. GraphiQL: `http://localhost:8082/graphiql`.
 
+## Majaribio (integration harness)
+
+```powershell
+mvn test
+```
+
+Yanahitaji **PostgreSQL halisi** yenye haki ya `CREATE/DROP DATABASE` — siri zinatoka `.env` ile ile (au environment variables). Hakuna Docker wala Testcontainers.
+
+Kila run:
+
+1. inatengeneza database yake ya kutupwa, `samaki_test_<nasibu>`;
+2. Flyway inaendesha **V1 → ya mwisho kutoka utupu** ndani yake — ndicho kinachofanya migrations kuwa kitu *kinachojaribiwa*, si kinachotumainiwa;
+3. fixture ya `@Profile("dev")` (`DevSeedService`) inapandwa — ndiyo faida ya wahusika wa dev kuwa wa kudumu;
+4. database inafutwa mwishoni.
+
+**Kutenganisha tests ni kujenga schema upya (Flyway `clean` + `migrate`) kabla ya KILA test**, si `@Transactional` rollback: haya ni majaribio ya HTTP kamili, hivyo server inafungua na kufunga transaction zake mwenyewe — rollback ya test isingegusa chochote alichoandika, na ingeonekana kama imetenganisha ilhali haijatenganisha.
+
+`spring.flyway.clean-disabled=false` iko kwenye profile ya **majaribio pekee**, na `IntegrationTest.guardTestDatabase()` inakataa kusafisha database yoyote ambayo jina lake halianzi na `samaki_test_`.
+
+### Sera: module mpya HAIKAMILIKI bila tests zake
+
+Tangu sasa, kila module inayoongezwa inakuja na tests zake kwenye harness hii. Curl na SQL za mkono zinathibitisha **wakati mmoja**; hazizuii chochote kisirudi. Daily Tasks ndiyo ya kwanza inayoshikwa na sheria hii.
+
 ## Documents za schema
 
 `Data_Dictionary_Majedwali.md` na `ERD_Muundo_wa_Database.mermaid` **hazihaririwi kwa mkono** — zinazalishwa kutoka database halisi:
