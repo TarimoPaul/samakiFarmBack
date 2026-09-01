@@ -105,6 +105,23 @@
             <artifactId>spring-graphql-test</artifactId>
             <scope>test</scope>
         </dependency>
+        <!--
+            TestRestTemplate inaitumia hii ikiwepo, badala ya
+            HttpURLConnection ya JDK.
+
+            Si mapambo. Kwa client ya JDK, KILA jibu la 401 linalipuka kwa
+            "cannot retry due to server authentication, in streaming mode"
+            badala ya kusomeka: client inaona 401, inataka kujaribu tena
+            ikiwa na uthibitisho, na inashindwa kwa sababu body ilikwisha
+            tiririshwa. Hiyo ingefanya kila test ya "ombi hili linapaswa
+            kukataliwa kwa 401" ionekane kama hitilafu ya mtandao - nayo
+            ndiyo hasa aina ya test ambayo harness hii ipo kwa ajili yake.
+        -->
+        <dependency>
+            <groupId>org.apache.httpcomponents.client5</groupId>
+            <artifactId>httpclient5</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>
