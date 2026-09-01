@@ -16,6 +16,12 @@ type Query {
     # vipimo vya tanki analomoendeshea mzunguko huo (jedwali halina
     # cycle_id - angalia WaterQualityService).
     waterQualityLogs(unitId: Int, cycleId: Int): [WaterQualityLog!]!
+
+    # ---------- Daily Tasks ----------
+    # Kazi ZOTE za mzunguko kwa siku moja, kila moja ikiwa na `done` yake.
+    # `date` ikiachwa wazi ni leo. Huu ndio mkataba unaosomwa na Reminders -
+    # angalia DailyTaskStatus hapo chini.
+    dailyTasks(cycleId: Int!, date: String): [DailyTaskStatus!]!
 }
 
 type Mutation {
@@ -28,6 +34,9 @@ type Mutation {
 
     # ---------- Water Quality ----------
     logWaterQuality(input: LogWaterQualityInput!): WaterQualityLog!
+
+    # ---------- Daily Tasks ----------
+    completeTask(input: CompleteTaskInput!): DailyTaskStatus!
 }
 
 type ProductionUnit {
@@ -170,5 +179,55 @@ input LogWaterQualityInput {
     notes: String
 }
 
-# Moduli zilizobaki (DailyTasks, Finance) zitaongezwa hapa kwa muundo
-# uleule - angalia SRS §8 kwa orodha kamili.
+# ============================================================
+# Daily Tasks — kazi za kila siku na ukamilishaji wake
+#
+# `daily_tasks` ni KIOLEZO kinachojirudia (frequency=DAILY,
+# scheduled_time ni saa ya siku, hakuna tarehe ya mwisho). Hivyo
+# "imekamilika" si bendera juu ya kiolezo - ingekuwa kweli milele baada
+# ya siku ya kwanza - bali ni REKODI ya `task_completions`, moja kwa
+# (kiolezo, tarehe), kama UNIQUE(task_id, completion_date) ya V1
+# inavyolazimisha.
+#
+# MKATABA WA REMINDERS, na ndiyo sababu type hii ipo:
+#
+#     done = kuna rekodi ya (task_id, tarehe) yenye status DONE
+#
+# Kila kitu kingine ni outstanding - ikiwemo rekodi ya PENDING/MISSED/
+# LATE, kwa sababu kazi iliyokosekana bado ni kazi isiyofanyika.
+# ============================================================
+
+type DailyTaskStatus {
+    taskId: ID!
+    cycleId: Int
+    # Kulisha - Asubuhi / Kulisha - Jioni / Kuangalia Maji
+    taskType: String!
+    # Saa ya siku (HH:mm). Inarudishwa ili mteja aweze kukokotoa
+    # "overdue" (outstanding NA saa imepita) mwenyewe - haikokotolewi
+    # hapa kwa sababu inahitaji kanda ya saa, uamuzi wa Reminders.
+    scheduledTime: String!
+    frequency: String!
+    # Role iliyopangiwa kazi. NI null kwa data yote iliyopo:
+    # CycleService.createDefaultTasks haiweki assigned_role_id.
+    assignedRoleName: String
+    # Tarehe iliyoulizwa (au leo)
+    date: String!
+    # DONE / PENDING / MISSED / LATE kama rekodi ipo; OUTSTANDING kama
+    # haipo kabisa. Ina maelezo zaidi kuliko `done`.
+    status: String!
+    # Bendera moja isiyo na utata - ndiyo Reminders inayoisoma
+    done: Boolean!
+    completedAt: String
+    completedByName: String
+    notes: String
+}
+
+input CompleteTaskInput {
+    taskId: Int!
+    # Ikiachwa wazi, inatumia leo
+    completionDate: String
+    notes: String
+}
+
+# Module iliyobaki (Finance) itaongezwa hapa kwa muundo uleule -
+# angalia SRS §8 kwa orodha kamili.
