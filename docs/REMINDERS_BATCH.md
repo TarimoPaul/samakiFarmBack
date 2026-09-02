@@ -7,13 +7,15 @@
 
 ## Phase 0 — Gate (STOP + report if unresolved)
 
-1. **Task Completions contract (the dependency — this also verifies TC):** read the **merged** Task Completions code + schema. Report **exactly how "outstanding / overdue" is determined** — a query, a field, or derived. This is the input Reminders consumes. **If TC does not expose a clear outstanding/done signal → STOP and report.** Reminders cannot be built on an ambiguous contract.
-2. **Reminders/notification schema:** from the ERD — a send-log (recipient, channel, task ref, status, `sent_at`). **STOP if unspecified.**
-3. **Recipients:** who is reminded for a given task — all farm members, a role, an assignee? From the ERD/model.
-4. **Channels:** is there an existing Africa's Talking + AWS Pinpoint abstraction, or do you build the interface? Dispatch MUST be behind a **mockable interface** (tests must not hit the network). Both channels are intentional (not fallback).
+> **Signed off by Chief, 2026-09-01:** items 2, 3 and 4 below are **decided** — build them as written, do not re-open them. Item 1 is still a read-and-report step: the contract is stated here, but you confirm it against the merged code.
+
+1. **Task Completions contract (the dependency — this also verifies TC):** read the **merged** Task Completions code + schema (on `main`, commits `92be19b` + `1aa02a7`). Report **exactly how "outstanding / overdue" is determined** — a query, a field, or derived. Expected, per the TC batch: the query is **`dailyTasks(cycleId, date)`**, and outstanding = a `daily_tasks` template exists ∧ no `task_completions` row for `(task_id, date)` with status `DONE`. **If the merged code does not match that → STOP and report.** Reminders cannot be built on an ambiguous contract.
+2. **Reminders/notification schema — DECIDED:** the V1 `reminders` table cannot carry idempotency. Write a **migration** adding `recipient_user_id`, `sent_at`, `reminder_date`, and `UNIQUE(task_id, reminder_date, recipient_user_id, channel)`. This **changes the ERD** — that is approved; regenerate the ERD/Data Dictionary from the live DB after the migration (do not hand-edit them).
+3. **Recipients — DECIDED:** `daily_tasks.assigned_role_id` is null on every generated task, so do **not** key off the assignee. Recipients = **the farm's members who hold `mark_task_done`** (the same permission TC gates completion on). Resolve per farm, through the centralized scoping.
+4. **Channels — DECIDED:** channel stays the schema's `PUSH`/`SMS`; the **provider** sits behind it — **SMS → Africa's Talking**, **PUSH → AWS Pinpoint** (`users.push_token` already exists; `SmsSender` + `LoggingSmsSender` is the stub to build on). Send on **every channel available for that recipient** — both are intentional, not fallback. Dispatch MUST be behind a **mockable interface** (tests must not hit the network).
 5. **Timezone:** Dodoma is EAT (UTC+3) — reminders fire at a sensible local hour, not UTC.
 
-Proceed only if 1–3 resolve.
+Item 1 is now the only gate: proceed once it resolves.
 
 ---
 
