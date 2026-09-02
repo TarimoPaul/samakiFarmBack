@@ -141,6 +141,25 @@ Kila run:
 
 Tangu sasa, kila module inayoongezwa inakuja na tests zake kwenye harness hii. Curl na SQL za mkono zinathibitisha **wakati mmoja**; hazizuii chochote kisirudi. Daily Tasks ndiyo ya kwanza inayoshikwa na sheria hii.
 
+## Vikumbusho (Reminders scheduler)
+
+Tiki ya `@Scheduled` inauliza, kwa **kila shamba peke yake**, swali moja: *ni kazi zipi za leo bado hazijafanyika, na saa yake imepita?* Sheria ya "bado haijafanyika" ni ile ile ya Task Completions, neno kwa neno — hakuna nakala yake ya pili:
+
+```
+OUTSTANDING = kiolezo cha daily_tasks kipo, NA hakuna rekodi ya
+              task_completions kwa (task_id, tarehe) yenye status DONE
+```
+
+- **Wapokeaji ni RUHUSA, si role wala assignee**: wenye `mark_task_done` kwenye shamba husika, na `status = ACTIVE` pekee. (`daily_tasks.assigned_role_id` ni NULL kwenye kila kazi inayozalishwa, hivyo hakuna assignee wa kumfuata.)
+- **Njia mbili, si mbadala**: mwenye simu **na** `push_token` anapata SMS **na** push. Simu ya shambani inaweza kukosa data (push haifiki) ilhali SMS inafika — na kinyume chake.
+- **Haitumi mara mbili**: kila kutuma kunaandikwa `reminders` **kabla** ya kutumwa, na `UNIQUE(task_id, reminder_date, recipient_user_id, channel)` (V12) ndiyo inayoamua kama kutuma kunaruhusiwa. Tiki ya pili, restart, au instance ya pili haziwezi kurudia. **Hakuna kujaribu tena** baada ya kushindwa: rekodi ya `FAILED` inabaki na inazuia majaribio ya baadaye — bei ya makusudi ya kuchagua "isitumwe mara mbili" badala ya "lazima itumwe".
+- **EAT (UTC+3)**: cron ina `zone`, kwa sababu server ya production kwa kawaida iko UTC.
+- **Mizunguko iliyokwisha imeachwa nje** (`cycles.status = 'ACTIVE'` pekee): kiolezo hakina tarehe ya mwisho, hivyo bila kichujio hicho mzunguko uliovunwa ungezalisha vikumbusho milele.
+
+Usanidi wote ni wa mazingira (angalia `.env.example`): `REMINDERS_ENABLED`, `REMINDERS_CRON`, `REMINDERS_ZONE`, `REMINDERS_QUIET_START`/`_END`, `REMINDERS_SMS_ENABLED`, `REMINDERS_PUSH_ENABLED`.
+
+> **HAKUNA SMS/PUSH HALISI BADO.** `LoggingSmsSender`/`LoggingPushSender` zinaandika kwenye logs. Angalia "Kabla ya production".
+
 ## Documents za schema
 
 `Data_Dictionary_Majedwali.md` na `ERD_Muundo_wa_Database.mermaid` **hazihaririwi kwa mkono** — zinazalishwa kutoka database halisi:
@@ -157,10 +176,11 @@ Lombok 1.18.34 (iliyosimamiwa na spring-boot-dependencies 3.3.2) ilikuwa ikishin
 
 ## Bado Haijaandikwa
 
-- Entities/resolvers za: FeedPurchase, FeedingLog, FeedStockMovement, WaterQualityLog, TaskCompletion, Reminder, Cost, Customer, Sale, Asset
+- Entities/resolvers za: FeedPurchase, FeedingLog, FeedStockMovement, WaterQualityLog, TaskCompletion, Cost, Customer, Sale, Asset
 - API za `species` na kubadilisha jina/mahali pa shamba
 - Kubadilisha shamba (farm switching) — muundo unaruhusu uanachama mwingi, lakini token inabeba shamba MOJA (angalia `// TODO: farm switching`)
-- Reminders scheduler (Spring `@Scheduled`)
+- **Providers halisi za vikumbusho**: scheduler imeandikwa na inafanya kazi, lakini `SmsSender`/`PushSender` bado ni stub za logs — angalia "Kabla ya production"
+- API ya kusoma vikumbusho (GraphQL) — kwa sasa `reminders` ni logi ya ndani inayosomwa kwa SQL
 - Angular frontend (haijaguswa)
 
 Angalia `GAP_ANALYSIS.md` kwa uchambuzi kamili wa kilichopo dhidi ya kinachotakiwa.
@@ -168,7 +188,7 @@ Angalia `GAP_ANALYSIS.md` kwa uchambuzi kamili wa kilichopo dhidi ya kinachotaki
 ## Kabla ya production
 
 - Zima GraphiQL (`spring.graphql.graphiql.enabled: false`)
-- Badilisha `LoggingSmsSender` (stub inayoandika kwenye logs) na provider halisi — **kwa sasa OTP HAITUMWI kweli**
+- Badilisha `LoggingSmsSender` na `LoggingPushSender` (stub zinazoandika kwenye logs) na providers halisi — **SMS → Africa's Talking**, **PUSH → AWS Pinpoint**. Kwa sasa **OTP wala vikumbusho HAVITUMWI kweli**. Credentials lazima zitoke environment variables (mtindo ule ule wa `JWT_SECRET`), na bean halisi iwekwe kwa `@ConditionalOnProperty` ili stub ibaki pale credentials hazipo
 - Ongeza `spring-boot-starter-actuator` au ondoa ruhusa ya `/actuator/health` kwenye `SecurityConfig`
 - Rate limiting ya sasa iko kwenye kumbukumbu ya instance moja — kwa instance nyingi inahitajika Redis au sawa
 - Hakikisha load balancer inaandika upya `X-Forwarded-For` (angalia `ClientIp`)

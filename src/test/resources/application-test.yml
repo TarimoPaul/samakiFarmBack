@@ -13,7 +13,7 @@ spring:
     hibernate:
       # Flyway ndiyo inayosimamia schema hata kwenye majaribio - hiyo
       # ndiyo sababu ya harness hii kuwepo. `validate` inahakikisha
-      # entity zinalingana na schema iliyotengenezwa na V1->V11.
+      # entity zinalingana na schema iliyotengenezwa na V1->ya mwisho.
       ddl-auto: validate
     show-sql: false
   flyway:
@@ -29,6 +29,16 @@ spring:
 app:
   data:
     initialize: true
+  reminders:
+    # TIKI YA SAA IMEZIMWA KWENYE MAJARIBIO - si kwa sababu vikumbusho
+    # havijaribiwi (Kundi E kinaendesha tiki kwa mkono), bali kwa sababu
+    # cron inayoamka yenyewe ingeandika rekodi za `reminders` katikati ya
+    # test isiyoziomba. Hitilafu ya aina hiyo inatokea mara moja kwa mia,
+    # ikitegemea saa run ilipoanza - ndiyo aina mbaya kabisa.
+    #
+    # `enabled: false` inaondoa bean ya ReminderScheduler kabisa
+    # (@ConditionalOnProperty), hivyo hakuna kitu cha kuamka.
+    enabled: false
 
 logging:
   level:

@@ -77,6 +77,28 @@ app:
   role-permissions:
     csv:
       path: ${APP_ROLE_PERMISSIONS_CSV:seed/role_permissions.csv}
+  # ---------- Vikumbusho (Reminders scheduler) ----------
+  # Zote zinabadilishwa kwa environment variable bila kujenga upya:
+  # mfumo unaotuma SMS kwa watu halisi lazima uweze kuzimwa au
+  # kupunguzwa haraka kutoka kwenye mazingira, si kwa deploy mpya.
+  reminders:
+    # false = bean ya ReminderScheduler haitengenezwi kabisa (hakuna tiki).
+    enabled: ${REMINDERS_ENABLED:true}
+    # Saa 1 asubuhi / saa 6 mchana / saa 11 jioni - baada ya kila kazi ya
+    # kiolezo (07:00, 08:00, 17:00) kuiva. Kikumbusho kinachotangulia saa
+    # ya kazi ni kero, si kikumbusho.
+    cron: "${REMINDERS_CRON:0 0 7,12,17 * * *}"
+    # DODOMA NI EAT (UTC+3). Server ya production kwa kawaida iko UTC,
+    # hivyo bila kanda hii "saa 1 asubuhi" ingekuwa saa 10 alfajiri.
+    zone: ${REMINDERS_ZONE:Africa/Nairobi}
+    # Saa za kimya - dirisha linaruhusiwa kuvuka usiku wa manane.
+    # Kuziweka SAWA (mfano zote 00:00) kunazizima kabisa.
+    quiet-start: ${REMINDERS_QUIET_START:21:00}
+    quiet-end: ${REMINDERS_QUIET_END:06:00}
+    # Swichi kwa kila njia. Mpokeaji mwenye simu NA push_token anapata
+    # zote mbili - si mbadala (angalia ReminderDispatchService).
+    sms-enabled: ${REMINDERS_SMS_ENABLED:true}
+    push-enabled: ${REMINDERS_PUSH_ENABLED:true}
   root:
     # ROOT_PHONE/ROOT_PASSWORD zisipowekwa, ROOT HATENGENEZWI kabisa
     # (angalia RbacSeedService.seedRootUser) - si kosa la kuanzisha app,
