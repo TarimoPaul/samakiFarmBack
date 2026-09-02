@@ -4,7 +4,7 @@
 > Chanzo: database halisi. Izalishe upya baada ya kila migration:
 > `./tools/generate-docs.ps1`
 >
-> Toleo la 2026-08-31. Jedwali: **21**. Safu: **208**.
+> Toleo la 2026-09-02. Jedwali: **21**. Safu: **211**.
 
 ## Migrations zilizotumika
 
@@ -19,6 +19,7 @@
 - **V9** - farm name unique _(2026-08-24)_
 - **V10** - water quality module _(2026-08-31)_
 - **V11** - water quality ammonia _(2026-08-31)_
+- **V12** - reminders send log _(2026-09-02)_
 
 ## Muhtasari
 
@@ -512,12 +513,21 @@
 | `channel` | varchar(10) | NOT NULL |  |
 | `send_time` | timestamptz | NOT NULL |  |
 | `status` | varchar(20) | NOT NULL | 'PENDING' |
+| `recipient_user_id` | uuid | NOT NULL |  |
+| `reminder_date` | date | NOT NULL |  |
+| `sent_at` | timestamptz |  |  |
 
 **Vikwazo:**
 
+- **UNIQUE** `reminders_task_date_recipient_channel_key` - UNIQUE (task_id, reminder_date, recipient_user_id, channel)
 - **PK** `reminders_pkey` - PRIMARY KEY (reminder_id)
+- **FK** `reminders_recipient_user_id_fkey` - FOREIGN KEY (recipient_user_id) REFERENCES users(user_id)
 - **FK** `reminders_task_id_fkey` - FOREIGN KEY (task_id) REFERENCES daily_tasks(task_id) ON DELETE CASCADE
 - **CHECK** `reminders_channel_check` - CHECK (((channel)::text = ANY ((ARRAY['PUSH'::character varying, 'SMS'::character varying])::text[])))
+
+**Index:**
+
+- `idx_reminders_date`
 
 ---
 

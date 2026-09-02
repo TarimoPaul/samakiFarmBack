@@ -1,6 +1,6 @@
 %% ERD ya Mfumo wa Ufugaji wa Samaki
 %% IMEZALISHWA KIOTOMATIKI kutoka database halisi - USIIHARIRI KWA MKONO.
-%% Izalishe upya: ./tools/generate-docs.ps1   (2026-08-31, jedwali 21)
+%% Izalishe upya: ./tools/generate-docs.ps1   (2026-09-02, jedwali 21)
 erDiagram
     farms ||--o{ assets : "farm_id"
     cycles ||--o{ costs : "cycle_id"
@@ -20,6 +20,7 @@ erDiagram
     users ||--o{ feeding_logs : "recorded_by_user_id"
     users ||--o{ password_reset_otps : "user_id"
     farms ||--o{ production_units : "farm_id"
+    users ||--o{ reminders : "recipient_user_id"
     daily_tasks ||--o{ reminders : "task_id"
     permissions ||--o{ role_permissions : "permission_id"
     roles ||--o{ role_permissions : "role_id"
@@ -200,6 +201,9 @@ erDiagram
         varchar_10_ channel
         timestamptz send_time
         varchar_20_ status
+        uuid recipient_user_id FK
+        date reminder_date
+        timestamptz sent_at
     }
     role_permissions {
         integer role_id PK
