@@ -140,6 +140,25 @@ public final class ErrorCodes {
     public static final String FARM_IN_USE = "FARM_IN_USE";
 
     /**
+     * 409 - aina ya chakula haiwezi kufutwa kwa sababu bado inatumika
+     * (FeedService.deleteFeedType).
+     *
+     * Familia ile ile ya ROLE_IN_USE na FARM_IN_USE, na kwa sababu ILE ILE
+     * ya kiufundi: kufuta ni SOFT, hivyo safu za feeding_logs,
+     * feed_purchases na feed_stock_movements zingebaki zikielekeza kwenye
+     * aina ambayo @SQLRestriction inaificha kwenye kila query. Matokeo si
+     * data iliyofichwa tu - `FeedingLog.feedType` ni `FeedType!` kwenye
+     * schema, hivyo historia YOTE ya ulishaji ya shamba ingekataa kusomeka,
+     * si mstari mmoja tu.
+     *
+     * Kinachopitika, kama ROLE_IN_USE: aina isiyowahi kutumiwa inafutika
+     * mara moja. Ujumbe unataja IDADI ya rekodi zinazoizuia, na
+     * unapendekeza njia ya pili - KUIZIMA - ambayo ndiyo iliyokusudiwa na
+     * V16 tangu mwanzo kwa aina inayoachwa kutumika.
+     */
+    public static final String FEED_TYPE_IN_USE = "FEED_TYPE_IN_USE";
+
+    /**
      * 400 - data iliyotumwa haikubaliki kibiashara (kiasi hasi, tarehe
      * isiyosomeka, kitambulisho kisichojulikana).
      *

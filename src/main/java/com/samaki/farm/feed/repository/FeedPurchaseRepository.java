@@ -8,4 +8,7 @@ import java.util.List;
 public interface FeedPurchaseRepository extends JpaRepository<FeedPurchase, Integer> {
 
     List<FeedPurchase> findByFarm_FarmIdOrderByPurchaseDateDesc(Integer farmId);
+
+    /** Manunuzi mangapi yanaelekea aina hii - angalia FeedService.deleteFeedType. */
+    long countByFeedType_FeedTypeId(Integer feedTypeId);
 }

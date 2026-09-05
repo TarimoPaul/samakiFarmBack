@@ -98,4 +98,30 @@ public class FeedResolver {
                                     @Argument Integer maxAgeMonths) {
         return feedService.createFeedType(name, minAgeMonths, maxAgeMonths);
     }
+
+    // Hoja tambulifu tena, kwa mfuatano ule ule wa createFeedType: kitu
+    // kinachohaririwa ni safu zile zile tatu, hivyo kubadilisha kuwa input
+    // type hapa pekee kungefanya mutation mbili zinazoandika kitu kimoja
+    // zionekane tofauti bila sababu.
+    @MutationMapping
+    public FeedType updateFeedType(@Argument Integer feedTypeId,
+                                    @Argument String name,
+                                    @Argument Integer minAgeMonths,
+                                    @Argument Integer maxAgeMonths) {
+        return feedService.updateFeedType(feedTypeId, name, minAgeMonths, maxAgeMonths);
+    }
+
+    @MutationMapping
+    public FeedType setFeedTypeActive(@Argument Integer feedTypeId, @Argument Boolean active) {
+        return feedService.setFeedTypeActive(feedTypeId, active);
+    }
+
+    // Inarudisha Boolean, si FeedType: baada ya kufuta hakuna aina ya
+    // kurudisha - kila query ingeificha - na `true` pekee ndiyo taarifa
+    // iliyobaki. Kushindwa kunatoka kama hitilafu, si kama `false`.
+    @MutationMapping
+    public Boolean deleteFeedType(@Argument Integer feedTypeId) {
+        feedService.deleteFeedType(feedTypeId);
+        return true;
+    }
 }

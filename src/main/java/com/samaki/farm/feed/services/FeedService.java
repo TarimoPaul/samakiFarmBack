@@ -1,6 +1,8 @@
 package com.samaki.farm.feed.services;
 
 import com.samaki.farm.auth.security.PermissionChecker;
+import com.samaki.farm.common.exception.ConflictException;
+import com.samaki.farm.common.exception.ErrorCodes;
 import com.samaki.farm.cycle.entity.Cycle;
 import com.samaki.farm.cycle.repository.CycleRepository;
 import com.samaki.farm.farm.entity.Farm;
@@ -47,6 +49,9 @@ import java.util.stream.Collectors;
  */
 @Service
 public class FeedService {
+
+    /** `feed_types.name` ni VARCHAR(80) (V16). */
+    private static final int FEED_TYPE_NAME_MAX_LENGTH = 80;
 
     private final FeedPurchaseRepository purchaseRepository;
     private final FeedingLogRepository feedingLogRepository;
@@ -134,11 +139,127 @@ public class FeedService {
         }
 
         FeedType feedType = new FeedType();
-        feedType.setName(name.trim());
+        feedType.setName(requireAvailableName(name, null));
         feedType.setMinAgeMonths(min);
         feedType.setMaxAgeMonths(max);
         feedType.setActive(true);
         return feedTypeRepository.save(feedType);
+    }
+
+    /**
+     * Kuhariri aina iliyopo: jina na dirisha la umri. HAIGUSI `active`.
+     *
+     * KUBADILISHA DIRISHA KUNABADILISHA MAAMUZI YA KESHO, si ya jana.
+     * Ulishaji uliokwisha rekodiwa unaelekea aina kwa feed_type_id, hivyo
+     * historia inabaki ilivyo; kinachobadilika ni jibu la
+     * feedTypesForCycle kuanzia sasa - aina iliyokuwa EXACT kwa mzunguko
+     * fulani inaweza kuwa SAFE_LOWER au kutoonekana kabisa. Ndiyo maana
+     * sheria za dirisha ni ZILE ZILE za createFeedType: kuhariri
+     * hakuruhusiwi kuunda dirisha ambalo kusajili kusingeliruhusu.
+     */
+    @Transactional
+    public FeedType updateFeedType(Integer feedTypeId, String name, Integer minAgeMonths, Integer maxAgeMonths) {
+        permissionChecker.require("manage_feed_stock");
+
+        FeedType feedType = requireFeedType(feedTypeId);
+        int min = requireAgeMonths(minAgeMonths, "Umri wa chini (miezi)");
+        int max = requireAgeMonths(maxAgeMonths, "Umri wa juu (miezi)");
+        if (max < min) {
+            throw new IllegalArgumentException(
+                    "Umri wa juu (" + max + ") hauwezi kuwa chini ya umri wa chini (" + min + ").");
+        }
+
+        feedType.setName(requireAvailableName(name, feedTypeId));
+        feedType.setMinAgeMonths(min);
+        feedType.setMaxAgeMonths(max);
+        return feedTypeRepository.save(feedType);
+    }
+
+    /**
+     * Kuzima au kurudisha aina.
+     *
+     * HII NDIYO NJIA ILIYOKUSUDIWA na V16 kwa aina inayoachwa kutumika:
+     * "Aina inayoachwa kutumika haifutwi (rekodi za zamani zinaielekea);
+     * inazimwa." Aina iliyozimwa inabaki kwenye katalogi na kwenye kila
+     * rekodi ya zamani; kinachoacha ni kuonekana kwenye feedTypesForCycle,
+     * yaani hakuna anayeweza kuichagua kwa ulishaji mpya.
+     *
+     * Idempotent: kuzima iliyokwisha zimwa ni sawa, inarudisha hali ilivyo.
+     */
+    @Transactional
+    public FeedType setFeedTypeActive(Integer feedTypeId, Boolean active) {
+        permissionChecker.require("manage_feed_stock");
+
+        if (active == null) {
+            throw new IllegalArgumentException("Hali ya 'active' inahitajika.");
+        }
+        FeedType feedType = requireFeedType(feedTypeId);
+        feedType.setActive(active);
+        return feedTypeRepository.save(feedType);
+    }
+
+    /**
+     * Soft-delete ya aina - INAKATALIWA ikiwa bado inatumika popote.
+     *
+     * Ukaguzi wa zinazoitumia ndio moyo wa method hii, na si tahadhari ya
+     * kupita kiasi. Kufuta ni SOFT (BaseEntity.softDelete), hivyo safu ya
+     * feed_types inabaki na FK zote tatu zinabaki halali - lakini
+     * @SQLRestriction ya FeedType inaificha kwenye kila query. Ulishaji
+     * uliokuwa ukiielekea ungebaki ukielekeza mahali pasipoonekana, na
+     * `FeedingLog.feedType` ni `FeedType!` kwenye schema: si mstari mmoja
+     * ungepotea, ni historia YOTE ya ulishaji ya shamba ingekataa
+     * kusomeka. Ni hoja ile ile FARM_IN_USE inayotolewa kwa farm_users.
+     *
+     * Kikwazo kinapitika: aina isiyowahi kutumiwa - iliyosajiliwa kwa
+     * makosa, jina lililoandikwa vibaya - inafutika mara moja. Ujumbe
+     * unataja IDADI ya rekodi zinazoizuia na unapendekeza KUIZIMA, ambayo
+     * ndiyo hatua sahihi kwa aina iliyowahi kutumika.
+     */
+    @Transactional
+    public void deleteFeedType(Integer feedTypeId) {
+        permissionChecker.require("manage_feed_stock");
+
+        FeedType feedType = requireFeedType(feedTypeId);
+
+        long feedings = feedingLogRepository.countByFeedType_FeedTypeId(feedTypeId);
+        long purchases = purchaseRepository.countByFeedType_FeedTypeId(feedTypeId);
+        long movements = movementRepository.countByFeedType_FeedTypeId(feedTypeId);
+        long uses = feedings + purchases + movements;
+
+        if (uses > 0) {
+            throw new ConflictException(
+                    "Aina hii inatumika kwenye rekodi " + uses
+                            + " (ulishaji " + feedings + ", manunuzi " + purchases
+                            + ", leja " + movements + "). Haiwezi kufutwa - izime badala yake.",
+                    ErrorCodes.FEED_TYPE_IN_USE);
+        }
+
+        feedType.softDelete(permissionChecker.currentUser().getUserId());
+        feedTypeRepository.save(feedType);
+    }
+
+    /**
+     * Jina lililopunguzwa nafasi tupu, likiwa halali na halijachukuliwa.
+     *
+     * Ukaguzi upo hapa - si kwenye bean validation - kwa sababu unahitaji
+     * database, na kwa sababu jibu la "limechukuliwa?" linategemea hata
+     * aina ZILIZOFUTWA: safu yao ipo, na `feed_types.name` ni UNIQUE.
+     * Angalia FeedTypeRepository.countByNameIncludingDeleted.
+     */
+    private String requireAvailableName(String raw, Integer selfId) {
+        String name = raw == null ? "" : raw.trim();
+
+        if (name.isEmpty()) {
+            throw new IllegalArgumentException("Jina la aina ya chakula linahitajika.");
+        }
+        if (name.length() > FEED_TYPE_NAME_MAX_LENGTH) {
+            throw new IllegalArgumentException(
+                    "Jina la aina ya chakula lisizidi herufi " + FEED_TYPE_NAME_MAX_LENGTH + ".");
+        }
+        if (feedTypeRepository.countByNameIncludingDeleted(name, selfId) > 0) {
+            throw new ConflictException("Aina ya chakula yenye jina hili tayari ipo.");
+        }
+        return name;
     }
 
     // ==================================================================

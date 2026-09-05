@@ -11,4 +11,14 @@ public interface FeedingLogRepository extends JpaRepository<FeedingLog, Integer>
 
     /** Scoping ya shamba inapitia cycle -> unit -> farm (feeding_logs haina farm_id). */
     List<FeedingLog> findByCycle_Unit_Farm_FarmIdOrderByLogDateDesc(Integer farmId);
+
+    /**
+     * Ulishaji mangapi unaelekea aina hii? Ni swali la
+     * FeedService.deleteFeedType, si takwimu.
+     *
+     * Ni derived query, hivyo @SQLRestriction inaichuja: ulishaji
+     * uliofutwa haumzuii mtu kufuta aina, kwa sababu wenyewe hauonekani
+     * popote.
+     */
+    long countByFeedType_FeedTypeId(Integer feedTypeId);
 }

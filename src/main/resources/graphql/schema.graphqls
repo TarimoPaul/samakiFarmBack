@@ -49,6 +49,21 @@ type Mutation {
     # ya minAgeMonths (VALIDATION_ERROR vinginevyo).
     createFeedType(name: String!, minAgeMonths: Int!, maxAgeMonths: Int!): FeedType!
 
+    # Kuhariri aina iliyopo. Sheria za dirisha ni ZILE ZILE za kusajili.
+    # HAIGUSI `active` - hiyo ina mutation yake.
+    updateFeedType(feedTypeId: Int!, name: String!, minAgeMonths: Int!, maxAgeMonths: Int!): FeedType!
+
+    # Kuzima / kurudisha. Aina iliyozimwa inabaki kwenye katalogi na kwenye
+    # rekodi za zamani; haitokei tena kwenye feedTypesForCycle, hivyo
+    # haiwezi kuchaguliwa kwa ulishaji mpya. Ndiyo njia iliyokusudiwa na
+    # V16 kwa aina inayoachwa kutumika.
+    setFeedTypeActive(feedTypeId: Int!, active: Boolean!): FeedType!
+
+    # Soft-delete. INAKATALIWA kwa FEED_TYPE_IN_USE ikiwa ulishaji, manunuzi
+    # au leja yoyote inaielekea - angalia FeedService.deleteFeedType.
+    # Inarudisha `true`; kushindwa kunakuja kama hitilafu.
+    deleteFeedType(feedTypeId: Int!): Boolean!
+
     # ---------- Water Quality ----------
     logWaterQuality(input: LogWaterQualityInput!): WaterQualityLog!
 

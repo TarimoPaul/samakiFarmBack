@@ -21,6 +21,17 @@ public interface FeedStockMovementRepository extends JpaRepository<FeedStockMove
     boolean existsByFarm_FarmIdAndFeedType_FeedTypeId(Integer farmId, Integer feedTypeId);
 
     /**
+     * Movement ngapi za leja zinaelekea aina hii, kwenye shamba LOLOTE -
+     * angalia FeedService.deleteFeedType.
+     *
+     * Bila shamba kwa makusudi: katalogi ni ya kimfumo, hivyo swali la
+     * "aina hii inatumika?" ni la mfumo mzima. Kuuliza kwa shamba moja
+     * kungeruhusu msimamizi wa shamba A kufuta aina ambayo shamba B lina
+     * kilo zake ghalani.
+     */
+    long countByFeedType_FeedTypeId(Integer feedTypeId);
+
+    /**
      * Salio la stoo = jumla ya IN kutoa jumla ya OUT, KWA KILA AINA ya
      * chakula ndani ya shamba.
      *
