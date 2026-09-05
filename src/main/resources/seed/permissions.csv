@@ -5,8 +5,10 @@ edit_cycle,FARM,PRODUCTION,Kuongeza/kuhariri mizunguko ya uzalishaji
 manage_units,FARM,PRODUCTION,Kuongeza/kuhariri matanki/mabwawa
 mark_task_done,FARM,TASKS,Kuweka kazi ya kila siku kuwa imekamilika
 manage_farms,FARM,FARM_MANAGEMENT,Kuunda na kuorodhesha mashamba
+delete_farm,FARM,FARM_MANAGEMENT,Kufuta shamba
 log_feeding,FARM,FEED,Kurekodi ulishaji wa kila siku
 manage_feed_stock,FARM,FEED,Kununua chakula na kusimamia stoo
+view_feed_stock,FARM,FEED,Kuona salio la stoo na chakula kinachofaa
 
 # ==================== FINANCE MODULE ====================
 view_finance,FINANCE,REPORTING,Kuona gharama/mauzo/faida

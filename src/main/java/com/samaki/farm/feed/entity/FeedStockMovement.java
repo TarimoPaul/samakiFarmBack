@@ -24,7 +24,7 @@ import java.time.Instant;
 @Table(name = "feed_stock_movements")
 @Data
 @EqualsAndHashCode(callSuper = false, of = "movementId")
-@ToString(exclude = "farm")
+@ToString(exclude = {"farm", "feedType"})
 public class FeedStockMovement extends BaseEntity {
 
     @Id
@@ -35,6 +35,18 @@ public class FeedStockMovement extends BaseEntity {
     @ManyToOne
     @JoinColumn(name = "farm_id")
     private Farm farm;
+
+    /**
+     * Chakula gani kilihamishwa. Bila hii leja ilijumlisha kilo za aina
+     * zote kuwa namba moja, na aina mbili zenye salio +50/-50 zilighairiana
+     * hadi sifuri - ghala lililojaa likionekana tupu.
+     *
+     * NOT NULL: kila movement inatoka kwenye ununuzi au ulishaji, na vyote
+     * viwili vina aina yake (V16).
+     */
+    @ManyToOne
+    @JoinColumn(name = "feed_type_id", nullable = false)
+    private FeedType feedType;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)

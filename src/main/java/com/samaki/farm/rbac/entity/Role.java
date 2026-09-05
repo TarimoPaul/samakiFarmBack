@@ -26,6 +26,17 @@ public class Role extends BaseEntity {
 
     private String description;
 
+    /**
+     * Je, nafasi hii bado inaweza KUPEWA mtu?
+     *
+     * SI is_deleted. Nafasi iliyozimwa inabaki ikionekana kwenye
+     * GET /api/roles (ili iweze kurudishwa) na walioshikilia wanabaki nayo
+     * pamoja na ruhusa zao - kinachozuiliwa ni kuipa mtu MPYA (angalia
+     * FarmUserService.resolveRole). Angalia V13__role_active.sql.
+     */
+    @Column(nullable = false)
+    private boolean active = true;
+
     @ManyToMany
     @JoinTable(
         name = "role_permissions",

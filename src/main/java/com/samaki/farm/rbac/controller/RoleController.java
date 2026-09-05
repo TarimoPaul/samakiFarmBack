@@ -5,6 +5,7 @@ import com.samaki.farm.common.web.ApiResponsePage;
 import com.samaki.farm.common.web.PageableParam;
 import com.samaki.farm.rbac.dto.CreateRoleRequest;
 import com.samaki.farm.rbac.dto.RoleSummary;
+import com.samaki.farm.rbac.dto.UpdateRoleRequest;
 import com.samaki.farm.rbac.entity.Permission;
 import com.samaki.farm.rbac.services.RoleService;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -39,6 +40,45 @@ public class RoleController {
     @PreAuthorize("hasAuthority('manage_users')")
     public ApiResponse<RoleSummary> createRole(@RequestBody CreateRoleRequest req) {
         return ApiResponse.ok(roleService.createRole(req));
+    }
+
+    /** Jina na maelezo pekee - ruhusa zina endpoint yao hapo chini. */
+    @PutMapping("/{roleId}")
+    @PreAuthorize("hasAuthority('manage_users')")
+    public ApiResponse<RoleSummary> updateRole(@PathVariable Integer roleId,
+                                               @RequestBody UpdateRoleRequest req) {
+        return ApiResponse.ok(roleService.updateRole(roleId, req));
+    }
+
+    /**
+     * Kuzima nafasi: inabaki kwenye orodha, walioshikilia hawaguswi,
+     * lakini haipewi mtu mpya tena.
+     *
+     * POST (si PUT) kufuata mtindo ule ule wa UserController.disable/enable -
+     * ni kitendo kwa rasilimali iliyopo, si kuandika upya hali yake.
+     */
+    @PostMapping("/{roleId}/deactivate")
+    @PreAuthorize("hasAuthority('manage_users')")
+    public ApiResponse<RoleSummary> deactivateRole(@PathVariable Integer roleId) {
+        return ApiResponse.ok(roleService.setActive(roleId, false));
+    }
+
+    /** Kurudisha nafasi iliyozimwa. */
+    @PostMapping("/{roleId}/activate")
+    @PreAuthorize("hasAuthority('manage_users')")
+    public ApiResponse<RoleSummary> activateRole(@PathVariable Integer roleId) {
+        return ApiResponse.ok(roleService.setActive(roleId, true));
+    }
+
+    /**
+     * Soft-delete. Inakataliwa kwa 409 + ROLE_IN_USE endapo mtu yeyote
+     * bado anashikilia nafasi hii - angalia RoleService.deleteRole.
+     */
+    @DeleteMapping("/{roleId}")
+    @PreAuthorize("hasAuthority('manage_users')")
+    public ApiResponse<Void> deleteRole(@PathVariable Integer roleId) {
+        roleService.deleteRole(roleId);
+        return ApiResponse.ok(null, "Nafasi imefutwa.");
     }
 
     /** Badilisha (replace kabisa) ruhusa za role fulani. */

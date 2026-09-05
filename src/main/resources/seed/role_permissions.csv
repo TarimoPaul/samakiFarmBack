@@ -9,8 +9,10 @@ OWNER,view_finance
 OWNER,manage_users
 OWNER,approve_users
 OWNER,manage_farms
+OWNER,delete_farm
 OWNER,log_feeding
 OWNER,manage_feed_stock
+OWNER,view_feed_stock
 
 # FARM_MANAGER - anaendesha uzalishaji na fedha; hasimamii watumiaji,
 # haidhinishi, wala hauandi mashamba
@@ -21,14 +23,20 @@ FARM_MANAGER,mark_task_done
 FARM_MANAGER,view_finance
 FARM_MANAGER,log_feeding
 FARM_MANAGER,manage_feed_stock
+FARM_MANAGER,view_feed_stock
 
 # WORKER - kazi za kila siku pekee (kulisha ni kazi ya shambani, lakini
-# kununua chakula si kazi yake)
+# kununua chakula si kazi yake). view_feed_stock: hawezi kulisha bila
+# kuona kilichopo stoo wala bila kujua kipi kinafaa umri wa samaki hawa.
 WORKER,view_dashboard
 WORKER,mark_task_done
 WORKER,log_feeding
+WORKER,view_feed_stock
 
-# VIEWER - ripoti tu, hana uwezo wa kubadilisha chochote
+# VIEWER - ripoti tu, hana uwezo wa kubadilisha chochote. HAPATI
+# view_feed_stock: salio la ghala na maelekezo ya kulisha ni ya
+# wanaoshika chakula, si ya kila mwenye macho kwenye ripoti. (Anaendelea
+# kuona `feedPurchases` - matumizi ya fedha ndiyo kazi ya ripoti.)
 VIEWER,view_dashboard
 
 # Ubora wa maji - kupima ni kazi ya shambani (kama kulisha), hivyo WORKER

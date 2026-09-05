@@ -115,11 +115,36 @@ public class FarmUserService {
         return user;
     }
 
+    /**
+     * Nafasi inayoweza KUPEWA mtu - si tu nafasi inayopatikana kwa id.
+     *
+     * Ukaguzi wa `isDeleted()` si wa ziada: Hibernate HAITUMII
+     * @SQLRestriction kwenye lookup ya moja kwa moja ya PK (jambo
+     * lililoandikwa wazi kwenye BaseEntity), hivyo findById inarudisha
+     * hata nafasi iliyofutwa. Bila ukaguzi huu, kufuta nafasi
+     * kusingeizuia isipewe mtu - mteja mwenye kitambulisho chake cha
+     * zamani angeendelea kuitumia, na kufuta kungebaki ni kuificha tu.
+     *
+     * Ukaguzi wa `isActive()` ndiyo maana yenyewe ya kuzima. Nafasi
+     * iliyozimwa haipewi mtu MPYA, lakini waliokwisha kuwa nayo
+     * hawaguswi - hivyo hapa ndipo mahali PEKEE panapohitaji kujua, na
+     * ndiyo sababu kuzima hakuhitaji kufuta cache ya mtu yeyote
+     * (angalia RoleService.setActive).
+     */
     private Role resolveRole(Integer roleId) {
         if (roleId == null) {
             return null;
         }
-        return roleRepository.findById(roleId)
+        Role role = roleRepository.findById(roleId)
                 .orElseThrow(() -> new IllegalArgumentException("Role haipo"));
+        if (role.isDeleted()) {
+            throw new IllegalArgumentException("Role haipo");
+        }
+        if (!role.isActive()) {
+            throw new IllegalArgumentException(
+                    "Nafasi '" + role.getName() + "' imezimwa, hivyo haiwezi kupewa mtu. "
+                            + "Irudishe kwanza, au chagua nafasi nyingine.");
+        }
+        return role;
     }
 }

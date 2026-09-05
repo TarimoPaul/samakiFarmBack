@@ -33,9 +33,11 @@ public class DevDataSeeder implements CommandLineRunner {
     private static final Logger logger = LoggerFactory.getLogger(DevDataSeeder.class);
 
     private final DevSeedService devSeedService;
+    private final DevFeedSeedService devFeedSeedService;
 
-    public DevDataSeeder(DevSeedService devSeedService) {
+    public DevDataSeeder(DevSeedService devSeedService, DevFeedSeedService devFeedSeedService) {
         this.devSeedService = devSeedService;
+        this.devFeedSeedService = devFeedSeedService;
     }
 
     @Override
@@ -44,6 +46,14 @@ public class DevDataSeeder implements CommandLineRunner {
                 + "inayojulikana wanatengenezwa. HII HAIPASWI KUWA PRODUCTION.");
         try {
             devSeedService.seed();
+            // MPANGILIO NI MUHIMU: stoo ya chakula inahitaji shamba la
+            // onyesho, ambalo seed() hapo juu ndiyo inalitengeneza.
+            //
+            // Ni wito wa PILI, si sehemu ya seed(), kwa sababu harness ya
+            // majaribio inaita devSeedService.seed() moja kwa moja na
+            // INAHITAJI kuanza bila chakula chochote - angalia javadoc ya
+            // DevFeedSeedService.
+            devFeedSeedService.seed();
         } catch (Exception e) {
             // Kama RbacDataInitializer: seeding kushindwa HAKUZUII app kuanza.
             logger.error("Dev seeding imeshindwa: {}", e.getMessage(), e);

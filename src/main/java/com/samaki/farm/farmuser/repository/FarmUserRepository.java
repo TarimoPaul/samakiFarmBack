@@ -37,6 +37,25 @@ public interface FarmUserRepository extends JpaRepository<FarmUser, FarmUser.Far
     boolean existsByUser_UserIdAndFarm_FarmId(UUID userId, Integer farmId);
 
     /**
+     * Watu wangapi wanashikilia nafasi hii - swali la RoleService.deleteRole.
+     *
+     * Ni derived query, hivyo @SQLRestriction ya FarmUser inaichuja:
+     * uanachama ULIOTOLEWA (soft-deleted) hauhesabiwi. Ndivyo
+     * inavyopaswa kuwa - mtu aliyeondolewa kwenye shamba hashikilii
+     * nafasi yoyote, na kuhesabu safu yake ya zamani kungezuia nafasi
+     * isifutike milele kwa sababu isiyoonekana popote kwenye UI.
+     */
+    long countByRole_RoleId(Integer roleId);
+
+    /**
+     * Watu wangapi wako kwenye shamba hili - swali la FarmService.delete.
+     *
+     * Kama countByRole_RoleId: ni derived query, hivyo uanachama ULIOTOLEWA
+     * hauhesabiwi. Aliyekwisha ondolewa hazuii shamba lisifutwe.
+     */
+    long countByFarm_FarmId(Integer farmId);
+
+    /**
      * WATU wa shamba moja wenye ruhusa fulani - njia ya Reminders ya
      * kujua nani wa kumkumbusha.
      *

@@ -17,7 +17,7 @@ import java.time.LocalDate;
 @Table(name = "feeding_logs")
 @Data
 @EqualsAndHashCode(callSuper = false, of = "logId")
-@ToString(exclude = {"cycle", "recordedBy"})
+@ToString(exclude = {"cycle", "recordedBy", "feedType"})
 public class FeedingLog extends BaseEntity {
 
     @Id
@@ -32,8 +32,12 @@ public class FeedingLog extends BaseEntity {
     @Column(name = "log_date", nullable = false)
     private LocalDate logDate;
 
-    @Column(name = "feed_type")
-    private String feedType;
+    // KUKAZWA: ilikuwa maandishi huru YANAYORUHUSU null. Ulishaji usiotaja
+    // chakula hauwezi kupunguza salio la aina yoyote, hivyo ungeacha stoo
+    // ikidai kilo ambazo samaki tayari wamekula (V16).
+    @ManyToOne
+    @JoinColumn(name = "feed_type_id", nullable = false)
+    private FeedType feedType;
 
     @Column(name = "quantity_kg", nullable = false)
     private BigDecimal quantityKg;

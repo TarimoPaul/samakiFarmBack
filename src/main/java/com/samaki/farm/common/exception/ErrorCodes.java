@@ -109,6 +109,37 @@ public final class ErrorCodes {
     public static final String OWNER_IMMUTABLE = "OWNER_IMMUTABLE";
 
     /**
+     * 409 - nafasi haiwezi kufutwa kwa sababu bado inashikiliwa na watu
+     * (RoleService.deleteRole).
+     *
+     * Ni CONFLICT yenye maana MAHUSUSI, kama OWNER_IMMUTABLE - lakini
+     * TOFAUTI naye kwa jambo moja la msingi: hii INAWEZA kupita baadaye.
+     * Msimamizi akiwabadilishia watu hao nafasi nyingine, ombi lilelile
+     * linafanikiwa. Ndiyo maana ujumbe unataja IDADI yao: unamweleza
+     * kilichobaki kufanywa, si kwamba amekwama.
+     *
+     * Frontend inautumia kupendekeza njia nyingine ("izime badala ya
+     * kuifuta") - jambo ambalo CONFLICT ya jumla isingeweza kubeba.
+     */
+    public static final String ROLE_IN_USE = "ROLE_IN_USE";
+
+    /**
+     * 409 - shamba haliwezi kufutwa kwa sababu bado lina wanachama
+     * (FarmService.delete).
+     *
+     * Kama ROLE_IN_USE: kikwazo kinachopitika, si sheria ya kudumu -
+     * wanachama wakiondolewa, ombi lilelile linafanikiwa, na ujumbe unataja
+     * idadi yao ili msimamizi ajue kilichobaki.
+     *
+     * KWA NINI kikwazo kabisa: soft-delete ya shamba huacha safu za
+     * `farm_users` zikielekeza kwenye shamba ambalo kila query inalificha.
+     * Watu hao wangebaki na uanachama usio na shamba - kikao chao kikiwa
+     * kinaelekeza mahali pasipoonekana - na hakuna skrini yoyote
+     * ingeeleza kwa nini.
+     */
+    public static final String FARM_IN_USE = "FARM_IN_USE";
+
+    /**
      * 400 - data iliyotumwa haikubaliki kibiashara (kiasi hasi, tarehe
      * isiyosomeka, kitambulisho kisichojulikana).
      *

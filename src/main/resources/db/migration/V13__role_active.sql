@@ -1,0 +1,26 @@
+-- ============================================================
+-- Nafasi (role) inayoweza KUZIMWA bila kufutwa.
+--
+-- `active` NI TOFAUTI na `is_deleted` (V2), na zote mbili zinahitajika
+-- kwa sababu zinajibu maswali mawili tofauti:
+--
+--   is_deleted = true  ->  "haipo tena". @SQLRestriction inaificha kwenye
+--                          KILA query, hivyo haionekani popote - wala
+--                          kwenye skrini pekee inayoweza kuirudisha.
+--   active = false     ->  "ipo, lakini haipewi mtu mpya". Inaendelea
+--                          kuonekana kwenye orodha ya wasimamizi,
+--                          walioshikilia wanabaki nayo na ruhusa zao
+--                          hazibadiliki, na inarudishwa kwa kubofya mara
+--                          moja.
+--
+-- Bila safu hii, "kuzima" ingelazimika kuwa soft-delete - na kuzima role
+-- kungeifanya itoweke kwenye skrini inayoiendesha, jambo lisilorudishwa
+-- bila kuingia kwenye database kwa mkono.
+--
+-- DEFAULT true: kila role iliyopo (OWNER, FARM_MANAGER, WORKER, VIEWER na
+-- zozote zilizoundwa kupitia POST /api/roles) inaendelea kufanya kazi
+-- kama ilivyokuwa. Migration hii haibadilishi tabia ya mfumo hata kidogo
+-- hadi mtu abofye "Zima".
+-- ============================================================
+
+ALTER TABLE roles ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT true;

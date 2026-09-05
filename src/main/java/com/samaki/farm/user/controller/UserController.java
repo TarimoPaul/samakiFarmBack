@@ -4,6 +4,7 @@ import com.samaki.farm.common.web.ApiResponse;
 import com.samaki.farm.farmuser.services.FarmUserService;
 import com.samaki.farm.user.dto.AssignMembershipRequest;
 import com.samaki.farm.user.dto.CreateUserRequest;
+import com.samaki.farm.user.dto.UpdateUserRequest;
 import com.samaki.farm.user.dto.UserSummary;
 import com.samaki.farm.user.services.UserService;
 import jakarta.validation.Valid;
@@ -39,6 +40,17 @@ public class UserController {
     @PreAuthorize("hasAuthority('manage_users')")
     public ApiResponse<UserSummary> createUser(@Valid @RequestBody CreateUserRequest req) {
         return ApiResponse.ok(userService.createUser(req));
+    }
+
+    /**
+     * Jina/simu/barua pepe pekee. Password, hali ya akaunti na uanachama
+     * kila kimoja kina endpoint yake - angalia UserService.updateUser.
+     */
+    @PutMapping("/{userId}")
+    @PreAuthorize("hasAuthority('manage_users')")
+    public ApiResponse<UserSummary> updateUser(@PathVariable UUID userId,
+                                               @Valid @RequestBody UpdateUserRequest req) {
+        return ApiResponse.ok(userService.updateUser(userId, req));
     }
 
     @GetMapping

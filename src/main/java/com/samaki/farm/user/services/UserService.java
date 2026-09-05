@@ -7,6 +7,7 @@ import com.samaki.farm.common.exception.ConflictException;
 import com.samaki.farm.farmuser.entity.FarmUser;
 import com.samaki.farm.farmuser.repository.FarmUserRepository;
 import com.samaki.farm.user.dto.CreateUserRequest;
+import com.samaki.farm.user.dto.UpdateUserRequest;
 import com.samaki.farm.user.dto.UserSummary;
 import com.samaki.farm.user.entity.User;
 import com.samaki.farm.user.entity.UserStatus;
@@ -42,21 +43,83 @@ public class UserService {
     /** Msimamizi anaunda mtu - anaanza ACTIVE (msimamizi ndiye idhini). */
     @Transactional
     public UserSummary createUser(CreateUserRequest req) {
-        if (userRepository.existsByPhone(req.phone())) {
-            throw new ConflictException("Namba ya simu hii tayari imesajiliwa.");
-        }
-        if (req.email() != null && !req.email().isBlank() && userRepository.existsByEmail(req.email())) {
-            throw new ConflictException("Barua pepe hii tayari imesajiliwa.");
-        }
+        String phone = requireAvailablePhone(req.phone(), null);
+        String email = requireAvailableEmail(req.email(), null);
 
         User user = new User();
-        user.setName(req.name());
-        user.setPhone(req.phone());
-        user.setEmail(req.email());
+        user.setName(req.name().trim());
+        user.setPhone(phone);
+        user.setEmail(email);
         user.setPasswordHash(passwordEncoder.encode(req.password()));
         user.setStatus(UserStatus.ACTIVE);
 
         return toSummary(userRepository.save(user), null);
+    }
+
+    /**
+     * Utambulisho wa mtu: jina, simu, barua pepe. Hakuna kingine.
+     *
+     * HAIGUSI password, hali ya akaunti wala uanachama - kila kimoja kina
+     * endpoint yake. Ni sheria ile ile ya RoleService.updateRole: ombi la
+     * kurekebisha jina halipaswi kuwa na uwezo wa kubadilisha kile mtu
+     * anachoweza kufanya.
+     *
+     * INARUHUSIWA kwa mtu MWENYEWE, tofauti na disable/delete. Kubadilisha
+     * jina lako au namba yako hakukufungi nje ya mfumo - unaendelea kuingia,
+     * kwa namba mpya. Kikwazo cha requireNotSelf kingekuwa cha kubuni.
+     *
+     * HAKUNA cache inayofutwa: JwtAuthFilter inahifadhi userId, shamba, role
+     * na ruhusa - hakuna jina wala namba ndani yake, hivyo hakuna
+     * kilichopitwa na wakati. (Kuingia ni kwa namba, lakini hilo ni swali
+     * jipya kila mara, si cache.)
+     */
+    @Transactional
+    public UserSummary updateUser(UUID userId, UpdateUserRequest req) {
+        User user = requireManageableUser(userId);
+
+        user.setName(req.name().trim());
+        user.setPhone(requireAvailablePhone(req.phone(), userId));
+        user.setEmail(requireAvailableEmail(req.email(), userId));
+
+        return toSummary(userRepository.save(user), null);
+    }
+
+    /**
+     * Namba iliyopunguzwa nafasi tupu, ikiwa haijachukuliwa na mtu mwingine.
+     *
+     * Ukaguzi unahesabu hata waliofutwa (angalia
+     * UserRepository.countByPhoneIncludingDeleted): `users.phone` ni UNIQUE
+     * kwenye jedwali lote, si kwa wasiofutwa tu. Awali `existsByPhone`
+     * peke yake ilitumika hapa, hivyo kutumia tena namba ya mtu aliyefutwa
+     * kulipita ukaguzi na kurudi kama hitilafu ya jumla ya database.
+     */
+    private String requireAvailablePhone(String raw, UUID selfId) {
+        String phone = raw == null ? "" : raw.trim();
+        if (phone.isEmpty()) {
+            throw new IllegalArgumentException("Namba ya simu inahitajika.");
+        }
+        if (userRepository.countByPhoneIncludingDeleted(phone, selfId) > 0) {
+            throw new ConflictException("Namba ya simu hii tayari imesajiliwa.");
+        }
+        return phone;
+    }
+
+    /**
+     * Barua pepe, au NULL.
+     *
+     * Tupu inakuwa null, si "": safu ni UNIQUE na inaruhusu NULL nyingi,
+     * lakini "" moja tu - hivyo mtu wa pili asiye na barua pepe angekataliwa
+     * kwa sababu isiyoeleweka kabisa.
+     */
+    private String requireAvailableEmail(String raw, UUID selfId) {
+        if (raw == null || raw.isBlank()) {
+            return null;
+        }
+        String email = raw.trim();
+        if (userRepository.countByEmailIncludingDeleted(email, selfId) > 0) {
+            throw new ConflictException("Barua pepe hii tayari imesajiliwa.");
+        }
+        return email;
     }
 
     /** Wanaosubiri idhini - ndio orodha ambayo mwenye approve_users anaifanyia kazi. */

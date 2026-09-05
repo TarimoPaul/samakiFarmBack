@@ -18,7 +18,7 @@ import java.time.LocalDate;
 @Table(name = "feed_purchases")
 @Data
 @EqualsAndHashCode(callSuper = false, of = "purchaseId")
-@ToString(exclude = "farm")
+@ToString(exclude = {"farm", "feedType"})
 public class FeedPurchase extends BaseEntity {
 
     @Id
@@ -33,8 +33,11 @@ public class FeedPurchase extends BaseEntity {
     @Column(name = "purchase_date", nullable = false)
     private LocalDate purchaseDate;
 
-    @Column(name = "feed_type", nullable = false)
-    private String feedType;
+    // Ilikuwa maandishi huru (VARCHAR(80)); sasa ni katalogi - angalia
+    // V16__feed_type_catalog.sql. NOT NULL kama ilivyokuwa.
+    @ManyToOne
+    @JoinColumn(name = "feed_type_id", nullable = false)
+    private FeedType feedType;
 
     @Column(name = "quantity_kg", nullable = false)
     private BigDecimal quantityKg;

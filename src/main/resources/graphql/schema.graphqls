@@ -9,7 +9,20 @@ type Query {
     feedPurchases: [FeedPurchase!]!
     feedingLogs(cycleId: Int): [FeedingLog!]!
     feedStockMovements: [FeedStockMovement!]!
-    feedStockBalance: Float!
+
+    # Salio la stoo, MSTARI MMOJA KWA KILA AINA ya chakula, kwa shamba la
+    # mwombaji. Ilikuwa `Float!` moja - angalia FeedStockBalance hapo chini
+    # kwa sababu ya kubadilika. Orodha tupu = hakuna chakula chochote
+    # kilichowahi kuingia wala kutoka.
+    feedStockBalance: [FeedStockBalance!]!
+
+    # Katalogi ya aina za chakula, kwa ukurasa wa kuisimamia.
+    # activeOnly ikiachwa wazi (au true): zinazotumika pekee.
+    feedTypes(activeOnly: Boolean): [FeedType!]!
+
+    # Chakula gani kinafaa samaki wa mzunguko huu LEO. Hakirudishi kamwe
+    # chakula cha samaki wakubwa kuliko hawa - angalia FeedService.classify.
+    feedTypesForCycle(cycleId: Int!): FeedTypesForCycle!
 
     # ---------- Water Quality ----------
     # Bila hoja: vipimo vya shamba zima. unitId: tanki moja. cycleId:
@@ -31,6 +44,10 @@ type Mutation {
     # ---------- Feed ----------
     recordFeedPurchase(input: RecordFeedPurchaseInput!): FeedPurchase!
     logFeeding(input: LogFeedingInput!): FeedingLog!
+
+    # Aina mpya kwenye katalogi ya kimfumo. maxAgeMonths lazima isiwe chini
+    # ya minAgeMonths (VALIDATION_ERROR vinginevyo).
+    createFeedType(name: String!, minAgeMonths: Int!, maxAgeMonths: Int!): FeedType!
 
     # ---------- Water Quality ----------
     logWaterQuality(input: LogWaterQualityInput!): WaterQualityLog!
@@ -86,13 +103,66 @@ input CreateCycleInput {
 }
 
 # ============================================================
-# Feed — ununuzi, ulishaji, na leja ya stoo
+# Feed — katalogi ya chakula, ununuzi, ulishaji, na leja ya stoo
+#
+# `feedType` ilikuwa MAANDISHI HURU kwenye ununuzi na ulishaji. Sasa ni
+# katalogi (angalia V16__feed_type_catalog.sql). Maandishi huru hayakuweza
+# kujibu swali linaloamua kila mlo: chakula hiki ni cha samaki wa umri
+# gani? - wala kuruhusu salio la stoo kuhesabiwa kwa aina.
 # ============================================================
+
+# Aina ya chakula. Ni katalogi YA KIMFUMO (haina farm_id), kama Species -
+# mashamba yote yanaisoma ile ile.
+type FeedType {
+    feedTypeId: ID!
+    name: String!
+    # Dirisha la umri ambalo chakula hiki kimetengenezwa kwa ajili yake, kwa
+    # miezi, PANDE ZOTE MBILI ZIKIHUSISHWA. Chakula cha vifaranga ni [0, 0].
+    minAgeMonths: Int!
+    maxAgeMonths: Int!
+    # Aina isiyotumika tena inazimwa, haifutwi - rekodi za zamani
+    # zinaielekea.
+    active: Boolean!
+}
+
+# Mstari mmoja wa salio. Kilo za aina moja haziwezi kulisha samaki
+# wanaohitaji nyingine, hivyo salio moja la shamba zima lilikuwa
+# linadanganya: +50 ya chakula cha vifaranga na -50 cha wakubwa
+# zilighairiana hadi 0, ghala lenye chakula likionekana tupu.
+type FeedStockBalance {
+    feedType: FeedType!
+    # Inaweza kuwa HASI: leja inaripoti, haihukumu (angalia FeedService).
+    quantityKg: Float!
+}
+
+# Aina pamoja na SABABU ya kuwa kwenye orodha ya kufaa.
+type SuitableFeedType {
+    feedType: FeedType!
+    # EXACT      - min <= umri <= max; kilichokusudiwa umri huu.
+    # SAFE_LOWER - max < umri; chakula cha wadogo, wakubwa wanakila.
+    # UNSAFE_HIGHER HAIONEKANI HAPA KAMWE: chakula cha samaki wakubwa
+    # kuliko hawa hakirudishwi kabisa, kwa sababu chochote kilicho kwenye
+    # orodha ya kuchagua kitachaguliwa na mtu fulani siku fulani.
+    suitability: String!
+}
+
+type FeedTypesForCycle {
+    # Miezi mizima tangu kuwekwa kwa vifaranga, ikishushwa chini, si chini
+    # ya sifuri. Inarudishwa ili mteja aeleze uamuzi bila kuukokotoa upya.
+    cycleAgeMonths: Int!
+    # true = KILA aina inayotumika ni ya samaki wakubwa kuliko hawa (au
+    # katalogi ni tupu). Ni bendera yake yenyewe, si `feedTypes.isEmpty()`
+    # inayokisiwa na mteja: orodha tupu hapa ni pengo halisi la katalogi
+    # linalopaswa kuelezwa, si hali ya kawaida.
+    noSuitableFeed: Boolean!
+    # EXACT kwanza, kisha SAFE_LOWER; ndani ya kila daraja, kwa jina.
+    feedTypes: [SuitableFeedType!]!
+}
 
 type FeedPurchase {
     purchaseId: ID!
     purchaseDate: String!
-    feedType: String!
+    feedType: FeedType!
     quantityKg: Float!
     unitCost: Float!
     # Inakokotolewa na database (GENERATED ALWAYS) - si sehemu ya input
@@ -102,7 +172,7 @@ type FeedPurchase {
 
 input RecordFeedPurchaseInput {
     purchaseDate: String!
-    feedType: String!
+    feedTypeId: Int!
     quantityKg: Float!
     unitCost: Float!
     supplier: String
@@ -112,7 +182,10 @@ type FeedingLog {
     logId: ID!
     cycle: Cycle!
     logDate: String!
-    feedType: String
+    # SI NULL tena (ilikuwa `String`). Ulishaji usiotaja chakula hauwezi
+    # kupunguza salio la aina yoyote, hivyo ungeacha stoo ikidai kilo
+    # ambazo samaki tayari wamekula.
+    feedType: FeedType!
     quantityKg: Float!
     recordedByName: String
 }
@@ -121,7 +194,15 @@ input LogFeedingInput {
     cycleId: Int!
     # Ikiachwa wazi, inatumia leo
     logDate: String
-    feedType: String
+    # INAKAGULIWA dhidi ya umri wa mzunguko kwa sheria ile ile ya
+    # feedTypesForCycle (FeedService.classify). Vinavyokataliwa kwa
+    # VALIDATION_ERROR ni VIWILI TU: chakula cha samaki WAKUBWA kuliko hawa
+    # (minAgeMonths > umri), na aina iliyozimwa.
+    #
+    # SAFE_LOWER INARUHUSIWA kwa makusudi: kulisha wakubwa chakula cha
+    # wadogo ni uamuzi halali (stoo imeisha, mfuko wa mwisho), si kosa.
+    # Onyo ni kazi ya UI, si la server kuzuia.
+    feedTypeId: Int!
     quantityKg: Float!
 }
 
@@ -129,6 +210,7 @@ input LogFeedingInput {
 # Haiandikwi moja kwa moja na mteja (angalia FeedService).
 type FeedStockMovement {
     movementId: ID!
+    feedType: FeedType!
     direction: String!
     quantityKg: Float!
     referencePurchaseId: Int
