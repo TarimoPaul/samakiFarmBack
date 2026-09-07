@@ -159,6 +159,38 @@ public final class ErrorCodes {
     public static final String FEED_TYPE_IN_USE = "FEED_TYPE_IN_USE";
 
     /**
+     * 409 - ununuzi umeshabatilishwa, hivyo hauwezi kubatilishwa wala
+     * kurekebishwa tena (FeedService.reverseFeedPurchase / correctFeedPurchase).
+     *
+     * SI ukamilifu wa kinadharia - ni ulinzi wa NAMBA. Kubatilisha ni
+     * kuandika movement ya OUT ya kilo zile zile; kufanya hivyo mara mbili
+     * kungeondoa kilo MARA MBILI kwenye salio la shamba, kwa ununuzi mmoja
+     * uliotokea mara moja. Ombi la pili linaloingia kwa sababu ya kubofya
+     * mara mbili, au kwa sababu skrini haikupata jibu la kwanza, halitakiwi
+     * kugharimu ghala.
+     *
+     * Ni CONFLICT yenye maana mahususi, kama OWNER_IMMUTABLE: haiwezi
+     * kupitika kwa kujaribu tena - ununuzi uliobatilishwa umebaki hivyo.
+     */
+    public static final String PURCHASE_ALREADY_REVERSED = "PURCHASE_ALREADY_REVERSED";
+
+    /**
+     * 409 - mzunguko umeshafungwa (HARVESTED au FAILED), hivyo hauwezi
+     * kufungwa tena (CycleService.closeCycle).
+     *
+     * Familia ile ile ya PURCHASE_ALREADY_REVERSED, na kwa sababu ILE ILE:
+     * si ukamilifu wa kinadharia, ni ulinzi wa NAMBA. Ombi la pili
+     * lingeandika mavuno mengine juu ya yaliyokwisha rekodiwa, na
+     * `actual_survival_rate` - inayokokotolewa kutoka kwa idadi hiyo -
+     * ingebadilika pamoja nayo bila mtu kuona. Mavuno yanatokea mara moja.
+     *
+     * Haipitiki kwa kujaribu tena: mzunguko uliofungwa umebaki hivyo.
+     * Frontend inaitumia kutofautisha "umeshafanya hili" na kosa la data
+     * ambalo mtumiaji anaweza kulirekebisha.
+     */
+    public static final String CYCLE_ALREADY_CLOSED = "CYCLE_ALREADY_CLOSED";
+
+    /**
      * 400 - data iliyotumwa haikubaliki kibiashara (kiasi hasi, tarehe
      * isiyosomeka, kitambulisho kisichojulikana).
      *

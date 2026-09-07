@@ -9,6 +9,7 @@ delete_farm,FARM,FARM_MANAGEMENT,Kufuta shamba
 log_feeding,FARM,FEED,Kurekodi ulishaji wa kila siku
 manage_feed_stock,FARM,FEED,Kununua chakula na kusimamia stoo
 view_feed_stock,FARM,FEED,Kuona salio la stoo na chakula kinachofaa
+view_feed_cost,FARM,FEED,Kuona bei na gharama ya manunuzi ya chakula
 
 # ==================== FINANCE MODULE ====================
 view_finance,FINANCE,REPORTING,Kuona gharama/mauzo/faida

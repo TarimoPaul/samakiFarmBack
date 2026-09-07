@@ -68,6 +68,27 @@ public class PermissionChecker {
     }
 
     /**
+     * Je, ana ruhusa hii? - UKAGUZI USIOTUPA HITILAFU.
+     *
+     * `require` inajibu swali la LANGO ("aingie au akatazwe"). Hii inajibu
+     * swali la MAUDHUI: ombi linaruhusiwa, lakini sehemu ya jibu ni yake
+     * au si yake. Mtumizi wa kwanza ni bei ya chakula (V18): mwenye
+     * `view_dashboard` anaona manunuzi yote, lakini unitCost/totalCost
+     * zinarudi null bila `view_feed_cost` - angalia FeedService.listPurchases.
+     *
+     * Ipo HAPA na si kwa `currentUser().hasPermission(...)` moja kwa moja
+     * kwa sababu ile ile iliyoweka `require` hapa: RBAC ina mahali PAMOJA.
+     * Bypass ya ROOT ni ile ile ya `require`, na inabaki hivyo yenyewe -
+     * ikiandikwa kwenye kila service, siku moja mmoja angeisahau.
+     *
+     * Inatupa UnauthorizedException kama hakuna mtu aliyeingia kabisa:
+     * "sijui wewe ni nani" si jibu la `false`, ni 401 ya currentUser().
+     */
+    public boolean has(String permissionCode) {
+        return currentUser().hasPermission(permissionCode);
+    }
+
+    /**
      * OPERESHENI ZA USIMAMIZI - farmId iliyoombwa lazima ilingane na shamba
      * la mtumiaji, ISIPOKUWA wenye mamlaka ya kampuni nzima.
      *

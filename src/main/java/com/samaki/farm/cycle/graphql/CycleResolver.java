@@ -41,4 +41,24 @@ public class CycleResolver {
     public Cycle createCycle(@Argument CreateCycleInput input) {
         return cycleService.create(input);
     }
+
+    /**
+     * Hoja tambulifu (si input type) kwa mfuatano ule ule wa schema -
+     * mtindo ule ule wa createFeedType/updateFeedType.
+     *
+     * HAKUNA `survivalRate` hapa, na hiyo ni sehemu ya mkataba:
+     * actualSurvivalRate inakokotolewa na database kutoka harvestedCount
+     * na fingerlingsCount (angalia V19), hivyo hakuna njia ya mteja
+     * kuipandikiza - kama ilivyo kwa FeedPurchase.totalCost.
+     */
+    @MutationMapping
+    public Cycle closeCycle(@Argument Integer cycleId,
+                             @Argument String outcome,
+                             @Argument String actualHarvestDate,
+                             @Argument Integer harvestedCount,
+                             @Argument Double totalWeightKg,
+                             @Argument String notes) {
+        return cycleService.closeCycle(cycleId, outcome, actualHarvestDate,
+                harvestedCount, totalWeightKg, notes);
+    }
 }

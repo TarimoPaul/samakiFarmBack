@@ -6,6 +6,10 @@ type Query {
     species: [Species!]!
 
     # ---------- Feed ----------
+    # Manunuzi ya SHAMBA LA MWOMBAJI pekee (`view_dashboard` + muktadha wa
+    # shamba). BEI INAFICHWA hapa, si kwenye UI: bila `view_feed_cost`,
+    # kila mstari unarudi na unitCost/totalCost = null huku kiasi, aina,
+    # tarehe na muuzaji vikibaki - angalia FeedService.listPurchases.
     feedPurchases: [FeedPurchase!]!
     feedingLogs(cycleId: Int): [FeedingLog!]!
     feedStockMovements: [FeedStockMovement!]!
@@ -24,6 +28,12 @@ type Query {
     # chakula cha samaki wakubwa kuliko hawa - angalia FeedService.classify.
     feedTypesForCycle(cycleId: Int!): FeedTypesForCycle!
 
+    # Kinachopotea aina hii ikizimwa, KWA SHAMBA LA MWOMBAJI. Ni ONYO la
+    # kabla ya kubofya - setFeedTypeActive HAIKATAI kuzima kwa sababu ya
+    # namba hizi (angalia FeedTypeDeactivationImpact hapo chini).
+    # `manage_feed_stock`, ile ile ya kitendo chenyewe. HAIANDIKI chochote.
+    feedTypeDeactivationImpact(feedTypeId: Int!): FeedTypeDeactivationImpact!
+
     # ---------- Water Quality ----------
     # Bila hoja: vipimo vya shamba zima. unitId: tanki moja. cycleId:
     # vipimo vya tanki analomoendeshea mzunguko huo (jedwali halina
@@ -41,8 +51,42 @@ type Mutation {
     createProductionUnit(input: CreateProductionUnitInput!): ProductionUnit!
     createCycle(input: CreateCycleInput!): Cycle!
 
+    # Kufunga mzunguko - KWA MKONO, DAIMA. Hakuna scheduler wala tarehe
+    # inayofanya hivi; `expectedHarvestDate` ni utabiri, si kichocheo.
+    #
+    # `outcome`: HARVESTED au FAILED (si ACTIVE - hii ni ya kufunga).
+    # harvestedCount/totalWeightKg ni LAZIMA: zaidi ya sifuri kwa
+    # HARVESTED, na sifuri inaruhusiwa kwa FAILED.
+    #
+    # Mzunguko uliokwisha fungwa unakataliwa kwa CYCLE_ALREADY_CLOSED -
+    # mavuno yanatokea mara moja.
+    #
+    # `edit_cycle`, ILE ILE ya createCycle. Hakuna ruhusa mpya.
+    #
+    # HAKUNA uga wa kiwango cha kuishi hapa KWA MAKUSUDI - angalia
+    # Cycle.actualSurvivalRate.
+    closeCycle(
+        cycleId: Int!
+        outcome: String!
+        actualHarvestDate: String!
+        harvestedCount: Int!
+        totalWeightKg: Float!
+        notes: String
+    ): Cycle!
+
     # ---------- Feed ----------
     recordFeedPurchase(input: RecordFeedPurchaseInput!): FeedPurchase!
+
+    # Kubatilisha ununuzi kwa REKODI YA KUREKEBISHA - movement ya OUT ya kilo
+    # zile zile - si kwa kuufuta. Safu inabaki kwenye orodha ikiwa
+    # `reversed: true`; salio la stoo linarudi lilipokuwa.
+    # PURCHASE_ALREADY_REVERSED ikiwa umeshabatilishwa.
+    reverseFeedPurchase(purchaseId: Int!): FeedPurchase!
+
+    # Kubatilisha wa zamani NA kurekodi mpya, kwenye transaction MOJA - hivyo
+    # shamba haliwezi kubaki limepoteza kilo kwa sababu ombi la pili
+    # limeshindwa. Inarudisha ununuzi MPYA.
+    correctFeedPurchase(purchaseId: Int!, input: RecordFeedPurchaseInput!): FeedPurchase!
     logFeeding(input: LogFeedingInput!): FeedingLog!
 
     # Aina mpya kwenye katalogi ya kimfumo. maxAgeMonths lazima isiwe chini
@@ -103,9 +147,34 @@ type Cycle {
     speciesName: String!
     stockingDate: String!
     fingerlingsCount: Int!
+
+    # Umri wa samaki (miezi) SIKU WALIPOWEKWA. 0 = wadogo kabisa, ndiyo
+    # chaguo-msingi na ndiyo hali ya kila mzunguko wa zamani.
+    stockingAgeMonths: Int!
+
+    # MAKISIO ya siku ya kuweka (0.85 kama hayakutolewa). Hayabadiliki
+    # kamwe baada ya hapo - hasa si wakati wa kuvuna. Linganisha na
+    # actualSurvivalRate hapo chini; ndiyo maana yote mawili yapo.
     survivalRateEstimate: Float!
+
+    # UTABIRI: stockingDate + (growthMonthsAvg ya aina - stockingAgeMonths).
+    # Tarehe hii ikifika HAKUNA kinachobadilika - hakuna scheduler
+    # inayoipitia na hakuna hali inayogeuka. Ni ya kuonyesha na kukumbusha
+    # "wanakaribia kuvunwa"; KUFUNGA NI KAZI YA MTU (closeCycle).
     expectedHarvestDate: String
+
+    # ---- Zinajazwa na closeCycle pekee; null kwa mzunguko unaoendelea ----
     actualHarvestDate: String
+    harvestedCount: Int
+    totalWeightKg: Float
+    harvestNotes: String
+
+    # KILICHOTOKEA: harvestedCount / fingerlingsCount, kikokotolewa na
+    # database (V19). HAKIPOKELEWI kama input popote - hakuna mutation
+    # yenye uga wake, na Postgres yenyewe inakataa kuiandika.
+    actualSurvivalRate: Float
+
+    # ACTIVE / HARVESTED / FAILED
     status: String!
 }
 
@@ -115,6 +184,11 @@ input CreateCycleInput {
     stockingDate: String!
     fingerlingsCount: Int!
     survivalRateEstimate: Float
+
+    # Hiari: umri wa samaki (miezi) wakati wa kuwekwa. Ikiachwa wazi ni 0.
+    # LAZIMA iwe chini ya umri wa kuvunwa wa aina husika
+    # (species.growthMonthsAvg) - vinginevyo VALIDATION_ERROR.
+    stockingAgeMonths: Int
 }
 
 # ============================================================
@@ -150,6 +224,31 @@ type FeedStockBalance {
     quantityKg: Float!
 }
 
+# Athari ya kuzima aina moja, kwa shamba la mwombaji.
+#
+# ONYO, SI KIKWAZO. setFeedTypeActive inazima BILA KUULIZA namba hizi:
+# kuzima kunarudishwa nyuma (`active: true` ni mutation ile ile), na aina
+# inayoachwa kutumika mara nyingi ina kilo zilizobaki - hiyo ndiyo sababu
+# ya kuzima, si sababu ya kukataliwa. Uamuzi ni wa mtu; kazi ya server ni
+# kumpa namba kabla, si baada.
+type FeedTypeDeactivationImpact {
+    # Salio la aina HII ghalani mwa shamba la mwombaji (kg) - jumla ILE ILE
+    # inayosomwa na `feedStockBalance` kwa mstari wake. Inaweza kuwa HASI
+    # (leja inaripoti, haihukumu) na ni SIFURI - si null - kwa aina isiyo na
+    # movement yoyote hapa.
+    remainingKg: Float!
+
+    # Mizunguko INAYOENDELEA ya shamba hili ambayo, kwa umri wao wa LEO,
+    # aina hii ndiyo EXACT yao PEKEE - yaani ikizimwa hawabaki na chakula
+    # kilichokusudiwa umri wao.
+    #
+    # Mzunguko wenye chaguo jingine - EXACT nyingine, AU SAFE_LOWER
+    # (chakula cha wadogo, ambacho wakubwa wanakila) - HAUHESABIWI. Onyo
+    # linalolia kwa mzunguko ambao bado una cha kula ni onyo ambalo mtu
+    # atajifunza kulipuuza.
+    dependentActiveCycleCount: Int!
+}
+
 # Aina pamoja na SABABU ya kuwa kwenye orodha ya kufaa.
 type SuitableFeedType {
     feedType: FeedType!
@@ -174,15 +273,40 @@ type FeedTypesForCycle {
     feedTypes: [SuitableFeedType!]!
 }
 
+# Mstari wa manunuzi. Safu za UENDESHAJI (tarehe, aina, kiasi, muuzaji)
+# zinaonekana kwa kila mwenye `view_dashboard`; safu za BEI zinahitaji
+# ruhusa yake yenyewe - angalia V18__view_feed_cost_permission.sql.
 type FeedPurchase {
     purchaseId: ID!
     purchaseDate: String!
     feedType: FeedType!
     quantityKg: Float!
-    unitCost: Float!
-    # Inakokotolewa na database (GENERATED ALWAYS) - si sehemu ya input
+
+    # NULL KWA MAKUSUDI kwa asiye na `view_feed_cost` - si "haijawekwa".
+    # Ilikuwa `Float!`; imelegezwa kwa sababu moja: mstari uliofichwa bei
+    # LAZIMA uweze kubeba null, na uga usio-null unaorudisha null
+    # ungeangusha ORODHA NZIMA (graphql-java inapandisha null hadi kwenye
+    # uga wa karibu unaoruhusu null). Ufichaji unafanywa na
+    # FeedService.listPurchases - SI na UI. Safu iliyofichwa kwenye jedwali
+    # la mteja ni namba iliyokwisha safiri kwenye waya.
+    unitCost: Float
+
+    # Inakokotolewa na database (GENERATED ALWAYS AS quantity_kg * unit_cost
+    # STORED, V1) - si sehemu ya input, na haiandikwi na Hibernate. Ni null
+    # pia kwa asiye na `view_feed_cost`: ingekuwa unitCost kwa kugawanya.
     totalCost: Float
+
     supplier: String
+
+    # Umebatilishwa kwa rekodi ya kurekebisha. Safu inabaki - leja ni ya
+    # kuongezwa tu - lakini kilo zake hazipo tena kwenye feedStockBalance.
+    #
+    # Inasomwa KUTOKA KWENYE LEJA (movement ya OUT inayouelekea), si kutoka
+    # safu ya feed_purchases: safu kama hiyo ingekuwa nakala inayoweza
+    # kuachana na ukweli. HAIFICHWI kwa asiye na `view_feed_cost` -
+    # ubatilishaji si bei, na anayepanga kulisha anahitaji kujua kwamba
+    # magunia haya hayako ghalani.
+    reversed: Boolean!
 }
 
 input RecordFeedPurchaseInput {

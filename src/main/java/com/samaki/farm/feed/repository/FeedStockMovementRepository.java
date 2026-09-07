@@ -32,6 +32,31 @@ public interface FeedStockMovementRepository extends JpaRepository<FeedStockMove
     long countByFeedType_FeedTypeId(Integer feedTypeId);
 
     /**
+     * Vitambulisho vya manunuzi ambayo TAYARI YAMEBATILISHWA.
+     *
+     * Ubatilishaji ni movement ya OUT inayoelekea ununuzi (angalia
+     * FeedService.reverseFeedPurchase) - hivyo leja YENYEWE ndiyo inayojibu
+     * "je, ununuzi huu umebatilishwa?". Hakuna safu ya `reversed_at` kwenye
+     * feed_purchases, na hiyo ni kwa makusudi: safu kama hiyo ingekuwa nakala
+     * ya ukweli ulio kwenye leja, na nakala inaweza kuachana na asili yake.
+     * Leja ndiyo rekodi; kila kitu kingine kinasomwa kutoka kwake.
+     *
+     * SWALI MOJA KWA ORODHA NZIMA, si moja kwa kila mstari: listPurchases
+     * inaita hii mara moja na kutumia Set inayorudi.
+     */
+    @Query("""
+           SELECT m.referencePurchaseId FROM FeedStockMovement m
+           WHERE m.farm.farmId = :farmId
+             AND m.direction = com.samaki.farm.feed.entity.FeedStockMovement.Direction.OUT
+             AND m.referencePurchaseId IS NOT NULL
+           """)
+    List<Integer> findReversedPurchaseIds(@Param("farmId") Integer farmId);
+
+    /** Je, ununuzi huu umeshabatilishwa? Kikwazo cha kubatilisha mara mbili. */
+    boolean existsByReferencePurchaseIdAndDirection(
+            Integer referencePurchaseId, FeedStockMovement.Direction direction);
+
+    /**
      * Salio la stoo = jumla ya IN kutoa jumla ya OUT, KWA KILA AINA ya
      * chakula ndani ya shamba.
      *
@@ -61,6 +86,32 @@ public interface FeedStockMovementRepository extends JpaRepository<FeedStockMove
            GROUP BY m.feedType.feedTypeId
            """)
     List<FeedTypeBalanceRow> sumBalanceByFarmId(@Param("farmId") Integer farmId);
+
+    /**
+     * Salio la AINA MOJA ndani ya shamba - hesabu ILE ILE ya
+     * sumBalanceByFarmId hapo juu, ikiulizwa kwa aina moja.
+     *
+     * Ni query yake badala ya kuchuja orodha ya sumBalanceByFarmId kwa
+     * sababu mtumizi wake (FeedService.feedTypeDeactivationImpact) anataka
+     * aina moja tu; kuvuta salio la kila aina ya shamba ili kutupa zote ila
+     * moja ni kazi bure. Ikitofautiana na dada yake siku moja, skrini ya
+     * ulishaji na onyo la kuzima zingeonyesha kilo TOFAUTI za kitu kimoja -
+     * ndiyo maana CASE ni ile ile herufi kwa herufi.
+     *
+     * COALESCE INAMAANISHA KITU HAPA, tofauti na kwenye orodha: aina isiyo
+     * na movement yoyote kwenye shamba hili ina kilo SIFURI - jibu halali
+     * la "kuna nini ghalani", si mstari usiokuwepo. (Kwenye orodha, mstari
+     * wa sifuri ungekuwa kelele; hapa null ingekuwa "sijui".)
+     */
+    @Query("""
+           SELECT COALESCE(SUM(CASE WHEN m.direction = com.samaki.farm.feed.entity.FeedStockMovement.Direction.IN
+                                    THEN m.quantityKg ELSE -m.quantityKg END), 0)
+           FROM FeedStockMovement m
+           WHERE m.farm.farmId = :farmId
+             AND m.feedType.feedTypeId = :feedTypeId
+           """)
+    BigDecimal sumBalanceByFarmIdAndFeedTypeId(@Param("farmId") Integer farmId,
+                                                @Param("feedTypeId") Integer feedTypeId);
 
     /** Mstari mmoja wa salio: aina (kwa kitambulisho) na kilo zilizobaki. */
     interface FeedTypeBalanceRow {

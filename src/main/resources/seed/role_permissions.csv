@@ -13,6 +13,7 @@ OWNER,delete_farm
 OWNER,log_feeding
 OWNER,manage_feed_stock
 OWNER,view_feed_stock
+OWNER,view_feed_cost
 
 # FARM_MANAGER - anaendesha uzalishaji na fedha; hasimamii watumiaji,
 # haidhinishi, wala hauandi mashamba
@@ -24,10 +25,14 @@ FARM_MANAGER,view_finance
 FARM_MANAGER,log_feeding
 FARM_MANAGER,manage_feed_stock
 FARM_MANAGER,view_feed_stock
+FARM_MANAGER,view_feed_cost
 
 # WORKER - kazi za kila siku pekee (kulisha ni kazi ya shambani, lakini
 # kununua chakula si kazi yake). view_feed_stock: hawezi kulisha bila
 # kuona kilichopo stoo wala bila kujua kipi kinafaa umri wa samaki hawa.
+# HAPATI view_feed_cost: anaona manunuzi (kiasi, aina, tarehe, muuzaji)
+# lakini si bei - bei ni mkataba kati ya shamba na muuzaji, si taarifa ya
+# kazi ya kila siku. Hata akipewa manage_feed_stock, bei inabaki null.
 WORKER,view_dashboard
 WORKER,mark_task_done
 WORKER,log_feeding
@@ -36,7 +41,8 @@ WORKER,view_feed_stock
 # VIEWER - ripoti tu, hana uwezo wa kubadilisha chochote. HAPATI
 # view_feed_stock: salio la ghala na maelekezo ya kulisha ni ya
 # wanaoshika chakula, si ya kila mwenye macho kwenye ripoti. (Anaendelea
-# kuona `feedPurchases` - matumizi ya fedha ndiyo kazi ya ripoti.)
+# kuona `feedPurchases` - matumizi ya fedha ndiyo kazi ya ripoti, ingawa
+# BILA namba za bei: view_feed_cost ni ya OWNER/FARM_MANAGER pekee.)
 VIEWER,view_dashboard
 
 # Ubora wa maji - kupima ni kazi ya shambani (kama kulisha), hivyo WORKER

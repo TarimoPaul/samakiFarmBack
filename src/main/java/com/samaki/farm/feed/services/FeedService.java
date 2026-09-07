@@ -9,8 +9,10 @@ import com.samaki.farm.farm.entity.Farm;
 import com.samaki.farm.farm.repository.FarmRepository;
 import com.samaki.farm.user.entity.User;
 import com.samaki.farm.user.repository.UserRepository;
+import com.samaki.farm.feed.dto.FeedPurchaseView;
 import com.samaki.farm.feed.dto.FeedStockBalance;
 import com.samaki.farm.feed.dto.FeedSuitability;
+import com.samaki.farm.feed.dto.FeedTypeDeactivationImpact;
 import com.samaki.farm.feed.dto.FeedTypesForCycle;
 import com.samaki.farm.feed.dto.LogFeedingInput;
 import com.samaki.farm.feed.dto.RecordFeedPurchaseInput;
@@ -32,6 +34,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -52,6 +55,9 @@ public class FeedService {
 
     /** `feed_types.name` ni VARCHAR(80) (V16). */
     private static final int FEED_TYPE_NAME_MAX_LENGTH = 80;
+
+    /** `cycles.status`: ACTIVE / HARVESTED / FAILED (angalia Cycle). */
+    private static final String ACTIVE_CYCLE_STATUS = Cycle.ACTIVE;
 
     private final FeedPurchaseRepository purchaseRepository;
     private final FeedingLogRepository feedingLogRepository;
@@ -76,10 +82,45 @@ public class FeedService {
         this.permissionChecker = permissionChecker;
     }
 
+    /**
+     * Manunuzi ya SHAMBA LA MWOMBAJI, bei ikifichwa kwa asiyeruhusiwa.
+     *
+     * NGAZI MBILI ZISIZOTEGEMEANA, na ndio jambo zima la method hii:
+     *
+     *  - `view_dashboard` + muktadha wa shamba -> LANGO. Bila hivyo hakuna
+     *    mstari wowote, na mistari inayotoka ni ya shamba lake pekee
+     *    (requireFarmScope ndiyo inayotoa farmId - haisomwi popote pengine,
+     *    hivyo scoping haiwezi kusahaulika).
+     *  - `view_feed_cost` (V18)                -> SAFU MBILI. Bila hiyo
+     *    unitCost na totalCost zinarudi null; kiasi, aina, tarehe na
+     *    muuzaji zinabaki kama zilivyo.
+     *
+     * UFICHAJI UPO HAPA, SI KWENYE UI, na tofauti si ya mtindo. Jedwali
+     * lisilo na safu ya bei bado lingekuwa limepokea bei ndani ya jibu la
+     * JSON: yeyote anayefungua DevTools, anayesoma cache ya mtandao, au
+     * anayepiga /graphql moja kwa moja kwa token yake ile ile angeiona.
+     * Namba ambayo haipaswi kumfikia mtu HAIPASWI KUONDOKA SERVER.
+     *
+     * Ukaguzi ni MMOJA kwa ombi, si mmoja kwa mstari: ruhusa haibadiliki
+     * katikati ya orodha, na kuiuliza mara elfu kungekuwa kazi bure.
+     */
     @Transactional(readOnly = true)
-    public List<FeedPurchase> listPurchases() {
+    public List<FeedPurchaseView> listPurchases() {
         Integer farmId = permissionChecker.requireFarmScope("view_dashboard");
-        return purchaseRepository.findByFarm_FarmIdOrderByPurchaseDateDesc(farmId);
+        boolean showCost = permissionChecker.has("view_feed_cost");
+
+        // SWALI MOJA kwa orodha nzima, si moja kwa kila mstari - ni sheria ile
+        // ile ya ukaguzi wa ruhusa hapo juu.
+        Set<Integer> reversedIds = Set.copyOf(movementRepository.findReversedPurchaseIds(farmId));
+
+        return purchaseRepository.findByFarm_FarmIdOrderByPurchaseDateDesc(farmId).stream()
+                .map(purchase -> {
+                    boolean reversed = reversedIds.contains(purchase.getPurchaseId());
+                    return showCost
+                            ? FeedPurchaseView.full(purchase, reversed)
+                            : FeedPurchaseView.masked(purchase, reversed);
+                })
+                .toList();
     }
 
     /** cycleId ikitolewa: ulishaji wa mzunguko mmoja; vinginevyo wa shamba zima. */
@@ -196,6 +237,74 @@ public class FeedService {
         FeedType feedType = requireFeedType(feedTypeId);
         feedType.setActive(active);
         return feedTypeRepository.save(feedType);
+    }
+
+    /**
+     * ATHARI ya kuzima aina hii, KWA SHAMBA LA MWOMBAJI - onyo la kabla ya
+     * kubofya, si kikwazo.
+     *
+     * SETI YA PILI YA SHERIA, si nakala ya setFeedTypeActive. Mutation
+     * haiulizi swali lolote kati ya haya mawili kwa makusudi (angalia doc
+     * yake): kuzima ni kitendo kinachorudishwa nyuma, hivyo kukikataa kwa
+     * sababu ya kilo au samaki kungemfungia msimamizi nje ya katalogi yake.
+     * Query hii inatoa TAARIFA ile ile ambayo kikwazo kingekuwa kimeitumia
+     * kukataa, na kumwachia mtu uamuzi. Ndiyo maana ni query - HAIANDIKI
+     * chochote, na inaweza kuitwa mara ngapi UI inavyotaka.
+     *
+     * `manage_feed_stock` na SHAMBA: ni ruhusa ile ile ya kitendo
+     * kinachofuata (huwezi kupewa onyo la jambo usiloruhusiwa kufanya), na
+     * requireFarmScope kwa sababu namba zote mbili ni za shamba - tofauti
+     * na listFeedTypes, ambayo inasoma katalogi ya kimfumo na hivyo inatumia
+     * `require` pekee.
+     *
+     * MZUNGUKO TEGEMEZI: uliobaki bila chakula KILICHOKUSUDIWA. Ni mizunguko
+     * INAYOENDELEA (ACTIVE) ya shamba hili ambayo:
+     *
+     *   1. aina hii ni EXACT kwa umri wao wa LEO, NA
+     *   2. hakuna aina NYINGINE inayotumika iliyo EXACT wala SAFE_LOWER
+     *      kwao.
+     *
+     * Sharti la pili ndilo linalotofautisha onyo lenye maana na kengele
+     * inayolia kila mara: mzunguko wenye chaguo jingine - hata la chakula
+     * cha wadogo, ambalo samaki wakubwa wanakila - hauachwi bila kitu, hivyo
+     * hauhesabiwi. UNSAFE_HIGHER haiokoi mtu: ni chakula cha samaki wakubwa
+     * kuliko hawa, ambacho feedTypesForCycle haikirudishi hata kidogo, hivyo
+     * "hesabu kila kisicho UNSAFE_HIGHER" hapa ni swali lile lile
+     * feedTypesForCycle inalojiuliza - kwa hesabu ile ile ya classify().
+     *
+     * Umri unatoka cycleAgeMonths(), si kwa kokotoo lingine: ukikokotolewa
+     * mara mbili, siku moja onyo lingesema kitu na skrini ya ulishaji
+     * ingeonyesha kingine.
+     */
+    @Transactional(readOnly = true)
+    public FeedTypeDeactivationImpact feedTypeDeactivationImpact(Integer feedTypeId) {
+        Integer farmId = permissionChecker.requireFarmScope("manage_feed_stock");
+        FeedType feedType = requireFeedType(feedTypeId);
+
+        BigDecimal remainingKg =
+                movementRepository.sumBalanceByFarmIdAndFeedTypeId(farmId, feedTypeId);
+
+        // Katalogi mara MOJA, si mara moja kwa kila mzunguko: haibadiliki
+        // katikati ya swali moja. Aina yenyewe inaondolewa - swali ni "nini
+        // kinabaki ikizimwa", hivyo isingeweza kujihesabia kama mbadala
+        // wake mwenyewe (na ingefanya kila mzunguko usiwe tegemezi).
+        List<FeedType> alternatives = feedTypeRepository.findByActiveTrueOrderByNameAsc().stream()
+                .filter(other -> !other.getFeedTypeId().equals(feedType.getFeedTypeId()))
+                .toList();
+
+        long dependent = cycleRepository
+                .findByUnit_Farm_FarmIdAndStatus(farmId, ACTIVE_CYCLE_STATUS).stream()
+                .filter(cycle -> {
+                    int ageMonths = cycleAgeMonths(cycle);
+                    if (classify(feedType, ageMonths) != FeedSuitability.EXACT) {
+                        return false;
+                    }
+                    return alternatives.stream().noneMatch(
+                            other -> classify(other, ageMonths) != FeedSuitability.UNSAFE_HIGHER);
+                })
+                .count();
+
+        return new FeedTypeDeactivationImpact(remainingKg, (int) dependent);
     }
 
     /**
@@ -394,6 +503,21 @@ public class FeedService {
     // Kuandika
     // ==================================================================
 
+    /**
+     * `manage_feed_stock`, BILA KUBADILIKA - `view_feed_cost` (V18)
+     * haiingii hapa hata kidogo.
+     *
+     * Ni ruhusa za maswali tofauti: ya kwanza ni "unaruhusiwa kununua?",
+     * ya pili ni "unaruhusiwa kuona bei ya ununuzi wa MWENZAKO?". Mwenye
+     * kununua ndiye ALIYEANDIKA unitCost kwenye input hii, na totalCost ni
+     * kuzidisha kwake mwenyewe - hivyo jibu la mutation halina namba
+     * ambayo mwombaji hakuwa nayo tayari, na halifichwi. Kuidai
+     * `view_feed_cost` hapa kungemzuia mnunuzi kurekodi bei anayoilipa.
+     *
+     * totalCost HAIWEKWI hapa kwa makusudi: ni GENERATED ALWAYS ya
+     * database (V1), na FeedPurchase.totalCost ni insertable=false. Hakuna
+     * njia ya mteja - wala ya service - kuipandikiza thamani nyingine.
+     */
     @Transactional
     public FeedPurchase recordPurchase(RecordFeedPurchaseInput input) {
         Integer farmId = permissionChecker.requireFarmScope("manage_feed_stock");
@@ -416,6 +540,93 @@ public class FeedService {
                 purchase.getPurchaseId(), null);
 
         return purchase;
+    }
+
+    /**
+     * Kubatilisha ununuzi kwa REKODI YA KUREKEBISHA - si kwa kuufuta.
+     *
+     * KWA NINI SI KUFUTA. Ununuzi hauishii kwenye safu yake: unazalisha
+     * movement ya IN, na jumla ya movement ndiyo salio la stoo ambalo skrini
+     * ya Malisho inaonyesha. Kufuta safu (hata kwa soft-delete) kungeacha
+     * salio likidai kilo ambazo hazikuwahi kununuliwa - au, ukifuta movement
+     * pia, lingebadilika bila alama yoyote ya KWA NINI. Leja ni ya
+     * kuongezwa tu; doc ya FeedStockMovement inasema hivyo.
+     *
+     * Badala yake inaandikwa movement ya OUT ya kilo ZILE ZILE, ikielekea
+     * ununuzi huo. Salio linarudi lilipokuwa, na historia inaeleza mambo
+     * mawili badala ya kuficha moja: ununuzi ulitokea, kisha ukabatilishwa.
+     *
+     * MARA MOJA TU. Kubatilisha mara mbili kungeondoa kilo mara mbili kwa
+     * ununuzi uliotokea mara moja - ndiyo maana ya PURCHASE_ALREADY_REVERSED,
+     * na ndiyo maana kubofya mara mbili si gharama.
+     */
+    @Transactional
+    public FeedPurchase reverseFeedPurchase(Integer purchaseId) {
+        permissionChecker.requireFarmScope("manage_feed_stock");
+
+        FeedPurchase purchase = requirePurchaseInCallersFarm(purchaseId);
+        requireNotReversed(purchase);
+
+        recordMovement(purchase.getFarm(), purchase.getFeedType(),
+                FeedStockMovement.Direction.OUT, purchase.getQuantityKg(),
+                purchase.getPurchaseId(), null);
+
+        return purchase;
+    }
+
+    /**
+     * Kurekebisha ununuzi: kubatilisha wa zamani na kurekodi mpya, KWENYE
+     * TRANSACTION MOJA.
+     *
+     * NI MUTATION MOJA KWA MAKUSUDI, na si urahisi wa API. Mteja angeweza
+     * kuita reverseFeedPurchase kisha recordFeedPurchase, lakini ombi la pili
+     * likishindwa - mtandao ukikatika, kikao kikiisha - shamba lingebaki
+     * limepoteza kilo zake bila ununuzi wa kuzirudisha, na hakuna skrini
+     * ingeeleza kwa nini. Zikiwa ndani ya transaction moja, hali hiyo
+     * haiwezekani: yote yanapita au hakuna linalopita.
+     *
+     * Inarudisha ununuzi MPYA - ndio ulio hai sasa. Wa zamani unabaki
+     * kwenye orodha ukiwa umebatilishwa, kwa sababu ndiyo maana ya leja
+     * isiyofutika: kilichoandikwa kimebaki kikiandikwa.
+     */
+    @Transactional
+    public FeedPurchase correctFeedPurchase(Integer purchaseId, RecordFeedPurchaseInput input) {
+        permissionChecker.requireFarmScope("manage_feed_stock");
+
+        FeedPurchase original = requirePurchaseInCallersFarm(purchaseId);
+        requireNotReversed(original);
+
+        recordMovement(original.getFarm(), original.getFeedType(),
+                FeedStockMovement.Direction.OUT, original.getQuantityKg(),
+                original.getPurchaseId(), null);
+
+        return recordPurchase(input);
+    }
+
+    /** Ununuzi wa shamba la mwombaji, au VALIDATION_ERROR. */
+    private FeedPurchase requirePurchaseInCallersFarm(Integer purchaseId) {
+        if (purchaseId == null) {
+            throw new IllegalArgumentException("Kitambulisho cha ununuzi kinahitajika.");
+        }
+        // findById haitumii @SQLRestriction (angalia BaseEntity), hivyo
+        // ukaguzi wa isDeleted ni wa lazima hapa kama ilivyo kwa FeedType.
+        FeedPurchase purchase = purchaseRepository.findById(purchaseId)
+                .orElseThrow(() -> new IllegalArgumentException("Ununuzi haupo."));
+        if (purchase.isDeleted()) {
+            throw new IllegalArgumentException("Ununuzi haupo.");
+        }
+        permissionChecker.requireResourceInCallersFarm(purchase.getFarm().getFarmId());
+        return purchase;
+    }
+
+    private void requireNotReversed(FeedPurchase purchase) {
+        boolean alreadyReversed = movementRepository.existsByReferencePurchaseIdAndDirection(
+                purchase.getPurchaseId(), FeedStockMovement.Direction.OUT);
+        if (alreadyReversed) {
+            throw new ConflictException(
+                    "Ununuzi huu tayari umebatilishwa. Hauwezi kubatilishwa wala kurekebishwa tena.",
+                    ErrorCodes.PURCHASE_ALREADY_REVERSED);
+        }
     }
 
     @Transactional
