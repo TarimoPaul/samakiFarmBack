@@ -3,6 +3,7 @@ code,module,group_name,description
 view_dashboard,FARM,REPORTING,Kuona dashibodi/ripoti
 edit_cycle,FARM,PRODUCTION,Kuongeza/kuhariri mizunguko ya uzalishaji
 manage_units,FARM,PRODUCTION,Kuongeza/kuhariri matanki/mabwawa
+manage_species,FARM,PRODUCTION,Kuongeza aina za samaki kwenye katalogi
 mark_task_done,FARM,TASKS,Kuweka kazi ya kila siku kuwa imekamilika
 manage_farms,FARM,FARM_MANAGEMENT,Kuunda na kuorodhesha mashamba
 delete_farm,FARM,FARM_MANAGEMENT,Kufuta shamba

@@ -93,6 +93,18 @@ type Mutation {
     # ya minAgeMonths (VALIDATION_ERROR vinginevyo).
     createFeedType(name: String!, minAgeMonths: Int!, maxAgeMonths: Int!): FeedType!
 
+    # ---------- Species ----------
+    # Aina mpya ya samaki kwenye katalogi ya kimfumo (`manage_species`).
+    #
+    # jina: LAZIMA na la kipekee - CONFLICT ikiwa limechukuliwa, ikiwemo na
+    # aina iliyofutwa (safu yake ipo, na `species.name` ni UNIQUE).
+    # growthMonthsAvg na avgHarvestWeightKg: zaidi ya sifuri
+    # (VALIDATION_ERROR vinginevyo).
+    #
+    # growthMonthsAvg INAHIFADHI nusu-mwezi: 6.5 ni thamani halali, na ndiyo
+    # inayokokotoa expectedHarvestDate ya kila mzunguko wa aina hii.
+    createSpecies(name: String!, growthMonthsAvg: Float!, avgHarvestWeightKg: Float!): Species!
+
     # Kuhariri aina iliyopo. Sheria za dirisha ni ZILE ZILE za kusajili.
     # HAIGUSI `active` - hiyo ina mutation yake.
     updateFeedType(feedTypeId: Int!, name: String!, minAgeMonths: Int!, maxAgeMonths: Int!): FeedType!
@@ -131,8 +143,13 @@ input CreateProductionUnitInput {
     waterSource: String
 }
 
-# Aina ya samaki. Ni katalogi ya kimfumo (haina farm_id) - inasomwa tu;
-# hakuna mutation ya kuunda/kuhariri kwa makusudi.
+# Aina ya samaki. Ni katalogi ya kimfumo (haina farm_id): aina moja
+# inaonekana kwa MASHAMBA YOTE.
+#
+# Kusoma ni `view_dashboard` (kila anayechagua aina wakati wa kuunda
+# mzunguko anaihitaji); kuandika ni `manage_species` (V20 - OWNER na
+# FARM_MANAGER pekee). Hakuna kuhariri wala kufuta kwa makusudi -
+# angalia SpeciesService.create.
 type Species {
     speciesId: ID!
     name: String!

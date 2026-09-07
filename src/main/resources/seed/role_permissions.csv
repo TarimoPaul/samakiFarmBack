@@ -4,6 +4,7 @@ role_name,permission_code
 OWNER,view_dashboard
 OWNER,edit_cycle
 OWNER,manage_units
+OWNER,manage_species
 OWNER,mark_task_done
 OWNER,view_finance
 OWNER,manage_users
@@ -20,6 +21,7 @@ OWNER,view_feed_cost
 FARM_MANAGER,view_dashboard
 FARM_MANAGER,edit_cycle
 FARM_MANAGER,manage_units
+FARM_MANAGER,manage_species
 FARM_MANAGER,mark_task_done
 FARM_MANAGER,view_finance
 FARM_MANAGER,log_feeding
@@ -33,6 +35,9 @@ FARM_MANAGER,view_feed_cost
 # HAPATI view_feed_cost: anaona manunuzi (kiasi, aina, tarehe, muuzaji)
 # lakini si bei - bei ni mkataba kati ya shamba na muuzaji, si taarifa ya
 # kazi ya kila siku. Hata akipewa manage_feed_stock, bei inabaki null.
+# HAPATI manage_species (V20): katalogi ya aina HAINA farm_id, hivyo aina
+# anayoiandika mtu mmoja inaonekana kwa MASHAMBA YOTE - si kazi ya
+# shambani. Anaendelea kuisoma kupitia `species` (view_dashboard).
 WORKER,view_dashboard
 WORKER,mark_task_done
 WORKER,log_feeding
