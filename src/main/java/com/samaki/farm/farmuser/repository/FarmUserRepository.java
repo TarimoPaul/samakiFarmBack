@@ -31,6 +31,35 @@ public interface FarmUserRepository extends JpaRepository<FarmUser, FarmUser.Far
     @EntityGraph(attributePaths = {"user", "role"})
     List<FarmUser> findByFarm_FarmIdOrderByUser_NameAsc(Integer farmId);
 
+    /**
+     * VITAMBULISHO vya mashamba yote ambayo mtu huyu ni mwanachama wake.
+     *
+     * Ni swali la AssetService.callersFarmIds: daftari la mali ni la
+     * KAMPUNI, hivyo linahitaji mashamba YOTE ya mwombaji - si `farmId`
+     * moja iliyo kwenye principal. Kumbuka JwtAuthFilter inachukua
+     * uanachama wa KWANZA pekee (`memberships.get(0)`, ikiwa na TODO ya
+     * farm switching), hivyo principal HAIWEZI kujibu swali hili;
+     * database ndiyo inayoweza.
+     *
+     * `join fu.farm f` ni ya WAZI kwa makusudi, si `fu.farm.farmId`.
+     * Njia fupi ingesoma safu ya FK bila kugusa jedwali la `farms` hata
+     * kidogo, hivyo @SQLRestriction ya Farm isingetumika na shamba
+     * LILILOFUTWA lingeingia kwenye orodha - mali zake zikionekana
+     * kwenye daftari la mtu ambaye shamba lake halipo tena.
+     *
+     * Inarudisha id pekee (si FarmUser): mtumiaji anahitaji seti ya
+     * vitambulisho, na findByUser_UserIdOrderByFarm_FarmIdAsc hapo juu
+     * inavuta `role.permissions` kwa ajili ya JwtAuthFilter - mzigo
+     * usiohitajika hapa.
+     */
+    @Query("""
+            select f.farmId from FarmUser fu
+            join fu.farm f
+            where fu.user.userId = :userId
+            order by f.farmId asc
+            """)
+    List<Integer> findFarmIdsByUserId(@Param("userId") UUID userId);
+
     @EntityGraph(attributePaths = {"user", "farm", "role"})
     Optional<FarmUser> findByUser_UserIdAndFarm_FarmId(UUID userId, Integer farmId);
 

@@ -5,6 +5,7 @@ import com.samaki.farm.cycle.entity.Cycle;
 import com.samaki.farm.cycle.repository.CycleRepository;
 import com.samaki.farm.dailytask.entity.DailyTask;
 import com.samaki.farm.dailytask.repository.DailyTaskRepository;
+import com.samaki.farm.productionunit.entity.ProductionUnit;
 import com.samaki.farm.productionunit.repository.ProductionUnitRepository;
 import com.samaki.farm.species.repository.SpeciesRepository;
 import com.samaki.farm.support.IntegrationTest;
@@ -17,7 +18,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.time.ZoneId;
 import java.util.List;
+import java.util.TimeZone;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -53,6 +56,15 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 @DisplayName("D - Kazi za kila siku")
 class DailyTaskCompletionRegressionTest extends IntegrationTest {
+
+    /**
+     * Kanda ya shambani - ILE ILE ya ReminderProperties.zone.
+     *
+     * Imeandikwa hapa kama maandishi kwa makusudi: test inayosoma
+     * usanidi ule ule ambao msimbo unausoma ingepita hata kama wote
+     * wawili wangekuwa na kosa moja.
+     */
+    private static final ZoneId EAT = ZoneId.of("Africa/Nairobi");
 
     @Autowired private DailyTaskRepository taskRepository;
     @Autowired private CycleRepository cycleRepository;
@@ -124,6 +136,38 @@ class DailyTaskCompletionRegressionTest extends IntegrationTest {
         return graphql(token, "query { dailyTasks(" + args + ") "
                 + "{ taskId taskType scheduledTime frequency assignedRoleName date status done "
                 + "completedAt completedByName notes } }");
+    }
+
+    private JsonNode farmDailyTasks(String token, String date) {
+        String args = date == null ? "" : "(date: \"" + date + "\")";
+        return graphql(token, "query { farmDailyTasks" + args + " "
+                + "{ taskId cycleId unitCode speciesName taskType scheduledTime date status done "
+                + "completedAt completedByName notes } }");
+    }
+
+    /**
+     * Mzunguko WA PILI wa shamba A, kwenye tanki lake mwenyewe.
+     *
+     * Tanki jipya (si unitA) kwa makusudi: `unitCode` ndiyo inayotakiwa
+     * kuthibitishwa, na mizunguko miwili kwenye tanki moja ingeirudia
+     * hivyo isingethibitisha chochote.
+     *
+     * Unapitia `createCycle` HALISI kwa sababu ile ile ya @BeforeEach:
+     * CycleService.createDefaultTasks ndiyo njia pekee kazi zinazaliwa.
+     */
+    private int seedSecondCycleOnFarmA(String code) {
+        ProductionUnit unit = new ProductionUnit();
+        unit.setFarm(unit(unitA).getFarm());
+        unit.setCode(code);
+        unit.setType(ProductionUnit.UnitType.TANK);
+        unit.setStatus("IDLE");
+        int unitId = unitRepository.save(unit).getUnitId();
+
+        int speciesId = speciesRepository.findAll().get(0).getSpeciesId();
+        JsonNode created = graphql(adminToken, "mutation { createCycle(input: {unitId: " + unitId
+                + ", speciesId: " + speciesId + ", stockingDate: \"" + LocalDate.now()
+                + "\", fingerlingsCount: 150}) { cycleId } }");
+        return created.path("data").path("createCycle").path("cycleId").asInt();
     }
 
     /** Hesabu ya rekodi KWENYE JEDWALI - si kwenye jibu la GraphQL. */
@@ -531,6 +575,254 @@ class DailyTaskCompletionRegressionTest extends IntegrationTest {
             graphql(workerBToken, completeMutation(morningFeedTask, ""));
 
             assertThat(completionRows()).isZero();
+        }
+    }
+
+    @Nested
+    @DisplayName("mwonekano wa shamba zima: farmDailyTasks")
+    class FarmWide {
+
+        @Test
+        @DisplayName("kazi za LEO za mizunguko YOTE inayoendelea, kwa ombi MOJA")
+        void tasksAcrossEveryActiveCycle() {
+            seedSecondCycleOnFarmA("A-PILI");
+
+            JsonNode listed = farmDailyTasks(workerToken, null).path("data").path("farmDailyTasks");
+
+            // Violezo vitatu kwa kila mzunguko ulioundwa na createCycle.
+            // (cycleA wa fixture umeandikwa moja kwa moja, hivyo hauna
+            // violezo - angalia cycleWithoutTemplatesIsEmpty.)
+            assertThat(listed).hasSize(6);
+            assertThat(listed).allSatisfy(task ->
+                    assertThat(task.path("date").asText())
+                            .isEqualTo(LocalDate.now(EAT).toString()));
+        }
+
+        @Test
+        @DisplayName("mpangilio ni mzunguko, kisha saa - si saa ikichanganya mizunguko")
+        void groupedByCycleThenTime() {
+            int second = seedSecondCycleOnFarmA("A-PILI");
+
+            JsonNode listed = farmDailyTasks(workerToken, null).path("data").path("farmDailyTasks");
+
+            assertThat(listed.get(0).path("cycleId").asInt()).isEqualTo(cycleWithTasks);
+            assertThat(listed.get(2).path("cycleId").asInt()).isEqualTo(cycleWithTasks);
+            assertThat(listed.get(3).path("cycleId").asInt()).isEqualTo(second);
+            assertThat(listed.get(5).path("cycleId").asInt()).isEqualTo(second);
+            // Ndani ya kila mzunguko: 07:00, 08:00, 17:00
+            assertThat(listed.get(0).path("scheduledTime").asText()).isEqualTo("07:00");
+            assertThat(listed.get(2).path("scheduledTime").asText()).isEqualTo("17:00");
+            assertThat(listed.get(3).path("scheduledTime").asText()).isEqualTo("07:00");
+        }
+
+        @Test
+        @DisplayName("done na completedByName ni sahihi kwa kila kazi peke yake")
+        void doneAndCompletedByAreCorrect() {
+            seedSecondCycleOnFarmA("A-PILI");
+            graphql(workerToken, completeMutation(morningFeedTask, ""));
+
+            JsonNode listed = farmDailyTasks(workerToken, null).path("data").path("farmDailyTasks");
+
+            JsonNode completed = listed.get(0);
+            assertThat(completed.path("taskId").asInt()).isEqualTo(morningFeedTask);
+            assertThat(completed.path("done").asBoolean()).isTrue();
+            assertThat(completed.path("status").asText()).isEqualTo("DONE");
+            // MTU aliyeikamilisha - ndicho kinachotofautisha mwonekano huu
+            // na orodha ya kazi zilizobaki.
+            assertThat(completed.path("completedByName").asText()).isNotBlank();
+            assertThat(completed.path("completedAt").isNull()).isFalse();
+
+            // Zilizobaki hazijaguswa - moja tu ndiyo imekamilika.
+            assertThat(listed).filteredOn(t -> t.path("done").asBoolean()).hasSize(1);
+            assertThat(listed.get(1).path("status").asText()).isEqualTo("OUTSTANDING");
+            assertThat(listed.get(1).path("completedByName").isNull()).isTrue();
+        }
+
+        @Test
+        @DisplayName("unitCode na speciesName zinatofautisha kazi zenye JINA MOJA")
+        void unitAndSpeciesLabelTheRepeatedTaskNames() {
+            seedSecondCycleOnFarmA("A-PILI");
+
+            JsonNode listed = farmDailyTasks(workerToken, null).path("data").path("farmDailyTasks");
+
+            // "Kulisha - Asubuhi" ipo mara mbili; tanki ndilo linalozitofautisha.
+            assertThat(listed.get(0).path("taskType").asText())
+                    .isEqualTo(listed.get(3).path("taskType").asText());
+            assertThat(listed.get(0).path("unitCode").asText())
+                    .isEqualTo(unit(unitA).getCode());
+            assertThat(listed.get(3).path("unitCode").asText()).isEqualTo("A-PILI");
+            assertThat(listed).allSatisfy(task ->
+                    assertThat(task.path("speciesName").asText()).isNotBlank());
+        }
+
+        @Test
+        @DisplayName("mzunguko ULIOVUNWA unatoka kwenye orodha - kichujio cha ACTIVE")
+        void harvestedCyclesAreExcluded() {
+            int second = seedSecondCycleOnFarmA("A-PILI");
+            assertThat(farmDailyTasks(workerToken, null).path("data").path("farmDailyTasks"))
+                    .hasSize(6);
+
+            JsonNode closed = graphql(adminToken, "mutation { closeCycle(cycleId: " + second
+                    + ", outcome: \"HARVESTED\", actualHarvestDate: \"" + LocalDate.now()
+                    + "\", harvestedCount: 120, totalWeightKg: 45.5) { cycleId status } }");
+            assertThat(graphqlErrorCode(closed)).isNull();
+
+            JsonNode listed = farmDailyTasks(workerToken, null).path("data").path("farmDailyTasks");
+
+            // Violezo vya mzunguko uliovunwa BADO VIPO kwenye jedwali -
+            // hakuna kinachovifuta. Kichujio cha query ndicho kinachozuia
+            // kikumbusho cha kulisha samaki wasiokuwepo - milele.
+            assertThat(listed).hasSize(3);
+            assertThat(listed).allSatisfy(task ->
+                    assertThat(task.path("cycleId").asInt()).isEqualTo(cycleWithTasks));
+            assertThat(taskRepository.findByCycle_CycleIdOrderByScheduledTimeAscTaskIdAsc(second))
+                    .hasSize(3);
+        }
+
+        @Test
+        @DisplayName("kazi za shamba jingine hazionekani - upeo umo ndani ya query")
+        void otherFarmsTasksAreNeverListed() {
+            JsonNode listed = farmDailyTasks(workerToken, null).path("data").path("farmDailyTasks");
+
+            assertThat(listed).noneSatisfy(task ->
+                    assertThat(task.path("taskId").asInt()).isEqualTo(taskB));
+
+            // Na upande wa pili: shamba B linaona chake pekee.
+            JsonNode listedB = farmDailyTasks(workerBToken, null).path("data").path("farmDailyTasks");
+            assertThat(listedB).hasSize(1);
+            assertThat(listedB.get(0).path("taskId").asInt()).isEqualTo(taskB);
+        }
+
+        @Test
+        @DisplayName("tarehe ya nyuma inaonyesha ILIYOKUWA imefanyika siku hiyo")
+        void anEarlierDateShowsThatDaysState() {
+            graphql(workerToken, completeMutation(waterTask, "completionDate: \"2026-08-30\""));
+
+            JsonNode past = farmDailyTasks(workerToken, "2026-08-30")
+                    .path("data").path("farmDailyTasks");
+            assertThat(past).filteredOn(t -> t.path("done").asBoolean()).hasSize(1);
+            assertThat(past).filteredOn(t -> t.path("taskId").asInt() == waterTask)
+                    .allSatisfy(t -> assertThat(t.path("done").asBoolean()).isTrue());
+
+            // Leo bado inasubiri - ni siku nyingine.
+            assertThat(farmDailyTasks(workerToken, null).path("data").path("farmDailyTasks"))
+                    .filteredOn(t -> t.path("done").asBoolean()).isEmpty();
+        }
+
+        @Test
+        @DisplayName("VIEWER anasoma (view_dashboard), asiye na shamba anakataliwa")
+        void gateIsTheSameAsDailyTasks() {
+            assertThat(graphqlErrorCode(farmDailyTasks(viewerToken, null))).isNull();
+            JsonNode blocked = farmDailyTasks(noroleToken, null);
+            assertThat(graphqlErrorCode(blocked)).isEqualTo("FORBIDDEN");
+            assertThat(graphqlMessage(blocked)).contains("view_dashboard");
+        }
+    }
+
+    @Nested
+    @DisplayName("tarehe: leo ni ya EAT, na kesho haikubaliki")
+    class DateRules {
+
+        @Test
+        @DisplayName("tarehe ya BAADAYE inakataliwa - kazi ya kesho haiwezi kuwa imefanyika")
+        void futureDateIsRejected() {
+            String tomorrow = LocalDate.now(EAT).plusDays(1).toString();
+
+            JsonNode response = graphql(workerToken,
+                    completeMutation(morningFeedTask, "completionDate: \"" + tomorrow + "\""));
+
+            assertThat(graphqlErrorCode(response)).isEqualTo("VALIDATION_ERROR");
+            assertThat(graphqlMessage(response)).contains("tarehe ya baadaye");
+            assertThat(completionRows()).isZero();
+        }
+
+        @Test
+        @DisplayName("mbali zaidi ya kesho pia - si suala la siku moja")
+        void farFutureIsRejectedToo() {
+            String nextYear = LocalDate.now(EAT).plusYears(1).toString();
+
+            assertThat(graphqlErrorCode(graphql(workerToken,
+                    completeMutation(morningFeedTask, "completionDate: \"" + nextYear + "\""))))
+                    .isEqualTo("VALIDATION_ERROR");
+            assertThat(completionRows()).isZero();
+        }
+
+        @Test
+        @DisplayName("LEO yenyewe inakubaliwa - mpaka ni 'baada ya leo', si 'kabla ya leo'")
+        void todayItselfIsAccepted() {
+            String today = LocalDate.now(EAT).toString();
+
+            assertThat(graphqlErrorCode(graphql(workerToken,
+                    completeMutation(morningFeedTask, "completionDate: \"" + today + "\""))))
+                    .isNull();
+            assertThat(completionRows(morningFeedTask, today)).isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("tarehe ya NYUMA bado inakubaliwa - kuandika baadaye ni kazi ya kawaida")
+        void backdatingStillWorks() {
+            // Mfanyakazi anayeandika jioni kazi ya asubuhi, au kesho yake
+            // baada ya mtandao kukatika. Ukaguzi wa kesho HAUKUGUSA hii.
+            String yesterday = LocalDate.now(EAT).minusDays(1).toString();
+            String lastWeek = LocalDate.now(EAT).minusWeeks(1).toString();
+
+            assertThat(graphqlErrorCode(graphql(workerToken,
+                    completeMutation(morningFeedTask, "completionDate: \"" + yesterday + "\""))))
+                    .isNull();
+            assertThat(graphqlErrorCode(graphql(workerToken,
+                    completeMutation(morningFeedTask, "completionDate: \"" + lastWeek + "\""))))
+                    .isNull();
+
+            assertThat(completionRows(morningFeedTask, yesterday)).isEqualTo(1);
+            assertThat(completionRows(morningFeedTask, lastWeek)).isEqualTo(1);
+        }
+
+        /**
+         * KANDA YA SAA INATHIBITISHWA KWELI, si kwa bahati.
+         *
+         * Kuulinganisha tu na LocalDate.now(EAT) hakungethibitisha
+         * chochote pale kanda ya JVM ikiwa tayari ni EAT - test
+         * ingepita hata kama msimbo ungetumia LocalDate.now().
+         *
+         * Hivyo kanda ya JVM INAGEUZWA kwa makusudi kuwa moja ambayo
+         * SASA HIVI iko kwenye TAREHE TOFAUTI na EAT, na uchaguzi
+         * unahakikisha hilo kwa saa yoyote ya mchana au usiku:
+         *
+         *   * kabla ya saa 15:00 EAT -> UTC-12 bado iko JANA
+         *     (inachelewa saa 15 nyuma ya EAT)
+         *   * kuanzia saa 15:00 EAT -> UTC+14 tayari iko KESHO
+         *     (inatangulia EAT kwa saa 11; inatosha kuanzia 13:00)
+         *
+         * Madirisha hayo mawili kwa pamoja yanafunika saa zote 24,
+         * hivyo daima kuna kanda yenye tarehe tofauti. Server yuko
+         * kwenye JVM hii hii kwenye majaribio, hivyo akitumia kanda ya
+         * JVM ataandika tarehe ya kanda hiyo - na test itaanguka.
+         */
+        @Test
+        @DisplayName("chaguo-msingi ni LEO YA EAT hata JVM ikiwa kwenye tarehe nyingine")
+        void defaultDateFollowsEatNotTheJvmZone() {
+            ZoneId elsewhere = LocalTime.now(EAT).getHour() < 15
+                    ? ZoneId.of("Etc/GMT+12")           // UTC-12, saa 15 nyuma ya EAT
+                    : ZoneId.of("Pacific/Kiritimati");  // UTC+14, saa 11 mbele ya EAT
+            assertThat(LocalDate.now(elsewhere))
+                    .as("kanda iliyochaguliwa LAZIMA iwe kwenye tarehe tofauti na EAT")
+                    .isNotEqualTo(LocalDate.now(EAT));
+
+            TimeZone original = TimeZone.getDefault();
+            try {
+                TimeZone.setDefault(TimeZone.getTimeZone(elsewhere));
+
+                graphql(workerToken, completeMutation(waterTask, ""));
+
+                assertThat(completionRows(waterTask, LocalDate.now(EAT).toString()))
+                        .as("rekodi imeandikwa kwenye tarehe ya EAT")
+                        .isEqualTo(1);
+                assertThat(completionRows(waterTask, LocalDate.now(elsewhere).toString()))
+                        .as("HAIJAandikwa kwenye tarehe ya kanda ya JVM")
+                        .isZero();
+            } finally {
+                TimeZone.setDefault(original);
+            }
         }
     }
 }

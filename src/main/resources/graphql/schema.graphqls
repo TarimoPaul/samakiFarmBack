@@ -28,6 +28,47 @@ type Query {
     # chakula cha samaki wakubwa kuliko hawa - angalia FeedService.classify.
     feedTypesForCycle(cycleId: Int!): FeedTypesForCycle!
 
+    # ---------- Assets ----------
+    # DAFTARI LA MALI LA KAMPUNI NZIMA - si la shamba moja.
+    #
+    # Hii ndiyo query PEKEE kwenye schema hii inayovuka mashamba:
+    # inarudisha mali za MASHAMBA YOTE ambayo mwombaji ni mwanachama au
+    # mmiliki wake, si za shamba lake "teule". Ndiyo maana kila mstari
+    # unabeba `farm` yake - bila hiyo, orodha isingeweza kupangwa wala
+    # kujumlishwa kwa shamba.
+    #
+    # JUMLA (kwa shamba, na ya kampuni) NI KAZI YA FRONTEND kwa makusudi:
+    # hakuna endpoint ya kujumlisha, na haipaswi kuwepo bado - angalia
+    # AssetResolver.
+    #
+    # `manage_assets` (V22 - OWNER/FARM_MANAGER). Mwombaji asiye na
+    # shamba lolote anapata orodha TUPU, si hitilafu.
+    assets: [Asset!]!
+
+    # Katalogi ya aina za mali, kwa fomu ya kuandikisha. `manage_assets`.
+    assetCategories: [AssetCategory!]!
+
+    # MASHAMBA YA MWOMBAJI - yale anayoyamiliki au kuwa mwanachama wake.
+    #
+    # Ni kichagua-shamba cha fomu ya kuandikisha mali. Bila hii,
+    # kichagua-shamba kingeweza kutoa shamba BAADA tu ya shamba hilo
+    # kuwa na mali (`assets` ndiyo mahali pekee farmId ilipoonekana) -
+    # yaani mali ya kwanza ya kila shamba isingeweza kuandikishwa kamwe.
+    #
+    # SI /api/farms. Ile ni ya `manage_farms` na inarudisha mashamba YOTE
+    # ya kampuni; hii inarudisha YAKE pekee, ikitumia uanachama ule ule
+    # ambao `assets` na `createAsset` wanautumia (AssetService.callersFarmIds).
+    #
+    # HAINA RUHUSA YA KUILINDA - kuingia (login) pekee, si `manage_assets`.
+    # Mashamba ya mtu mwenyewe si data ya kampuni: ni jibu la "wewe ni
+    # nani hapa", ambalo tayari analijua. Mwombaji asiye na shamba lolote
+    # anapata orodha TUPU, si hitilafu - kama `assets`.
+    #
+    # Inarudisha AssetFarm (farmId + name) kwa makusudi, si aina mpya:
+    # kila chaguo hapa ndicho hasa kinachokuwa `Asset.farm` ya mali
+    # itakayoandikishwa, na uga zilezile mbili ndizo zinazohitajika.
+    myFarms: [AssetFarm!]!
+
     # Kinachopotea aina hii ikizimwa, KWA SHAMBA LA MWOMBAJI. Ni ONYO la
     # kabla ya kubofya - setFeedTypeActive HAIKATAI kuzima kwa sababu ya
     # namba hizi (angalia FeedTypeDeactivationImpact hapo chini).
@@ -45,6 +86,18 @@ type Query {
     # `date` ikiachwa wazi ni leo. Huu ndio mkataba unaosomwa na Reminders -
     # angalia DailyTaskStatus hapo chini.
     dailyTasks(cycleId: Int!, date: String): [DailyTaskStatus!]!
+
+    # Kazi za SHAMBA ZIMA kwa siku moja - mizunguko YOTE inayoendelea
+    # (ACTIVE), si mmoja. Ndio mwonekano wa mfanyakazi anayefungua simu
+    # asubuhi, na wa mmiliki anayeuliza "tarehe hii, ni zipi
+    # zilifanyika na nani?" - swali moja, upeo mmoja, safari MOJA ya
+    # mtandao badala ya `cycles` + `dailyTasks` kwa kila mzunguko.
+    #
+    # HAKUNA hoja ya shamba: linatoka kwenye token. `date` ikiachwa wazi
+    # ni leo - LEO YA EAT (Africa/Nairobi), si ya server.
+    #
+    # `view_dashboard`, ILE ILE ya dailyTasks. Hakuna ruhusa mpya.
+    farmDailyTasks(date: String): [DailyTaskStatus!]!
 }
 
 type Mutation {
@@ -120,6 +173,32 @@ type Mutation {
     # Inarudisha `true`; kushindwa kunakuja kama hitilafu.
     deleteFeedType(feedTypeId: Int!): Boolean!
 
+    # ---------- Assets ----------
+    # Kuandikisha mali. `manage_assets` (V22 - OWNER/FARM_MANAGER pekee).
+    #
+    # farmId: LAZIMA, na LAZIMA liwe mojawapo ya mashamba ya mwombaji
+    # (uanachama au umiliki) - FORBIDDEN vinginevyo. Si lazima liwe
+    # shamba lake "teule": mmiliki wa mashamba mawili anaandikisha
+    # kwenye lolote kati yao (angalia AssetService.requireCallersFarm).
+    #
+    # cost: zaidi ya sifuri (VALIDATION_ERROR vinginevyo). NUMERIC(14,2).
+    # acquiredDate: YYYY-MM-DD, HAIWEZI kuwa ya baadaye. Ya nyuma ni
+    #   halali kabisa - daftari linaanzishwa leo kwa vitu vya zamani.
+    # sizeLabel: hiari, maandishi huru ("5000L", "ekari 2", "20HP").
+    createAsset(
+        name: String!
+        farmId: Int!
+        cost: Float!
+        acquiredDate: String!
+        sizeLabel: String
+        assetCategoryId: Int!
+    ): Asset!
+
+    # Aina mpya kwenye katalogi ya kimfumo ya mali. Jina la kipekee -
+    # CONFLICT ikiwa limechukuliwa, IKIWEMO na aina iliyofutwa (safu
+    # yake ipo, na `asset_categories.name` ni UNIQUE).
+    createAssetCategory(name: String!): AssetCategory!
+
     # ---------- Water Quality ----------
     logWaterQuality(input: LogWaterQualityInput!): WaterQualityLog!
 
@@ -150,6 +229,57 @@ input CreateProductionUnitInput {
 # mzunguko anaihitaji); kuandika ni `manage_species` (V20 - OWNER na
 # FARM_MANAGER pekee). Hakuna kuhariri wala kufuta kwa makusudi -
 # angalia SpeciesService.create.
+# ============================================================
+# MALI (assets) - V21/V22
+#
+# Daftari la vitu kampuni inavyomiliki. Tofauti na kila kitu kingine
+# hapa, kusoma ni kwa KAMPUNI NZIMA: mmiliki wa mashamba matatu anaona
+# orodha moja inayovuka yote (angalia Query.assets na AssetService).
+# ============================================================
+
+# Kitu kimoja kinachomilikiwa - generator, pikipiki, jengo, tanki.
+type Asset {
+    assetId: ID!
+    name: String!
+
+    # SHAMBA LA MALI HII. Ipo kwenye kila mstari kwa sababu orodha
+    # inavuka mashamba - ndiyo lebo inayoruhusu frontend kupanga na
+    # kujumlisha kwa shamba.
+    farm: AssetFarm!
+
+    assetCategory: AssetCategory!
+
+    # Bei ya kununulia (NUMERIC(14,2)). Daima > 0.
+    cost: Float!
+
+    # Lebo ya ukubwa ya HIARI: "5000L", "ekari 2", "20HP". Ni maandishi
+    # ya kusoma, si namba ya kukokotoa - vitu vya daftari hili
+    # havishiriki kipimo kimoja.
+    sizeLabel: String
+
+    # YYYY-MM-DD. Kamwe si ya baadaye.
+    acquiredDate: String!
+}
+
+# Shamba kama LEBO ya mali, si kama rasilimali kamili. Ina uga mbili
+# tu ambazo daftari linazihitaji; mashamba yenyewe yanasimamiwa kupitia
+# REST (/api/farms), si hapa.
+type AssetFarm {
+    farmId: ID!
+    name: String!
+}
+
+# Aina ya mali. Katalogi YA KIMFUMO (haina farm_id), kama Species na
+# FeedType - mashamba yote yanaisoma ile ile.
+#
+# NI YA KUUNDWA NA MTUMIAJI, si enum, na hiyo ndiyo hoja: orodha ya
+# vitu shamba linavyoweza kumiliki haina mwisho, na "Nyingine" ya enum
+# ni kundi ambalo jumla yake haielezi chochote.
+type AssetCategory {
+    assetCategoryId: ID!
+    name: String!
+}
+
 type Species {
     speciesId: ID!
     name: String!
@@ -438,6 +568,13 @@ input LogWaterQualityInput {
 type DailyTaskStatus {
     taskId: ID!
     cycleId: Int
+    # Tanki/bwawa (mfano "DEV-A1") na aina ya samaki (mfano "Sato").
+    # Ni za farmDailyTasks hasa: kwenye orodha ya shamba zima
+    # "Kulisha - Asubuhi" inajirudia mara moja kwa kila mzunguko, na
+    # namba ya mzunguko si kitu mfanyakazi anachokijua - tanki ndicho.
+    # Nullable: cycle_id ni nullable kwenye schema (angalia V1).
+    unitCode: String
+    speciesName: String
     # Kulisha - Asubuhi / Kulisha - Jioni / Kuangalia Maji
     taskType: String!
     # Saa ya siku (HH:mm). Inarudishwa ili mteja aweze kukokotoa

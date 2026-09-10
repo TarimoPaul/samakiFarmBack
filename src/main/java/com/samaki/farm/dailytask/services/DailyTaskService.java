@@ -10,6 +10,7 @@ import com.samaki.farm.dailytask.entity.DailyTask;
 import com.samaki.farm.dailytask.entity.TaskCompletion;
 import com.samaki.farm.dailytask.repository.DailyTaskRepository;
 import com.samaki.farm.dailytask.repository.TaskCompletionRepository;
+import com.samaki.farm.reminder.config.ReminderProperties;
 import com.samaki.farm.user.entity.User;
 import com.samaki.farm.user.repository.UserRepository;
 import org.springframework.stereotype.Service;
@@ -82,16 +83,36 @@ public class DailyTaskService {
     private final UserRepository userRepository;
     private final PermissionChecker permissionChecker;
 
+    /**
+     * KANDA YA SAA, si usanidi wa vikumbusho.
+     *
+     * Inatumika kwa kitu KIMOJA hapa: kujua "leo" ni tarehe ipi. Ipo
+     * kwenye ReminderProperties kwa sababu hapo ndipo ilipoandikwa
+     * kwanza (`Africa/Nairobi`), na KUINAKILI hapa ndiko kungekuwa
+     * kosa - ingekuwa mahali pa PILI pa kuiweka, na siku moja mmoja
+     * angebadilisha moja bila mwenzake.
+     *
+     * Bila hii ilikuwa `LocalDate.now()` - kanda ya JVM. Server ya ECS/
+     * RDS ni UTC, hivyo kati ya saa 6 na saa 9 usiku wa EAT (00:00-03:00)
+     * "leo" ilikuwa ikigeuka JANA: mfanyakazi wa alfajiri angeandika
+     * kazi yake kwenye tarehe iliyopita, na Scheduler - inayotumia
+     * kanda hii hii tayari - ingeendelea kumkumbusha kazi
+     * aliyokwisha kuifanya.
+     */
+    private final ReminderProperties reminderProperties;
+
     public DailyTaskService(DailyTaskRepository taskRepository,
                             TaskCompletionRepository completionRepository,
                             CycleRepository cycleRepository,
                             UserRepository userRepository,
-                            PermissionChecker permissionChecker) {
+                            PermissionChecker permissionChecker,
+                            ReminderProperties reminderProperties) {
         this.taskRepository = taskRepository;
         this.completionRepository = completionRepository;
         this.cycleRepository = cycleRepository;
         this.userRepository = userRepository;
         this.permissionChecker = permissionChecker;
+        this.reminderProperties = reminderProperties;
     }
 
     /**
@@ -118,7 +139,57 @@ public class DailyTaskService {
         requireCycleInCallersFarm(cycleId);
 
         LocalDate on = parseDate(date);
-        List<DailyTask> tasks = taskRepository.findByCycle_CycleIdOrderByScheduledTimeAscTaskIdAsc(cycleId);
+        return withStatus(
+                taskRepository.findByCycle_CycleIdOrderByScheduledTimeAscTaskIdAsc(cycleId), on);
+    }
+
+    /**
+     * MWONEKANO WA MFANYAKAZI: kazi za LEO za MIZUNGUKO YOTE
+     * INAYOENDELEA ya shamba lake, kila moja ikiwa na `done` yake na jina
+     * la aliyeikamilisha.
+     *
+     * =================================================================
+     * KWA NINI SI statusForCycle IKIITWA MARA NYINGI
+     *
+     * Mteja angeweza kuita `cycles(status: "ACTIVE")` kisha
+     * `dailyTasks(cycleId)` kwa kila mzunguko - na ndiyo iliyokuwa njia
+     * pekee. Ni maswali N+1 kutoka kwenye SIMU, si kutoka kwenye
+     * database: shamba lenye mizunguko sita ni safari saba za mtandao
+     * kabla skrini ya kwanza ya asubuhi haijajitokeza, kwenye mtandao wa
+     * shambani. Hapa ni query MBILI, daima: violezo, kisha rekodi zao.
+     *
+     * SWALI NI LILE LILE la kila siku, likiwa na UPEO tofauti tu - ndiyo
+     * maana `view(...)` ile ile ndiyo inayotumika, na sheria ya
+     * "outstanding" haiandikwi tena hapa. Ingekuwa imeandikwa mara ya
+     * pili, siku moja mmoja angeibadilisha upande mmoja.
+     * =================================================================
+     *
+     * UPEO WA SHAMBA hautoki kwa mteja: farmId inatoka kwa
+     * requireFarmScope (yaani kwenye token), hivyo HAKUNA hoja
+     * inayoweza kuombea shamba lingine - tofauti na dailyTasks
+     * ambayo inapokea cycleId na kwa hivyo LAZIMA iithibitishe.
+     *
+     * MIZUNGUKO ILIYOVUNWA imeachwa nje na query yenyewe (angalia
+     * DailyTaskRepository.findAllForFarm).
+     */
+    @Transactional(readOnly = true)
+    public List<DailyTaskStatusView> statusForFarm(String date) {
+        Integer farmId = permissionChecker.requireFarmScope(READ_PERMISSION);
+
+        LocalDate on = parseDate(date);
+        return withStatus(taskRepository.findAllForFarm(farmId), on);
+    }
+
+    /**
+     * Violezo + rekodi zao za siku moja, kwa query MOJA ya ziada.
+     *
+     * Ni sehemu ya PAMOJA ya statusForCycle na statusForFarm: zote mbili
+     * zina orodha ya violezo na tarehe, na zinatofautiana kwa jinsi
+     * orodha ilivyopatikana PEKEE. Ikiwa imeandikwa mara mbili, query ya
+     * pamoja - iliyowekwa hasa kuzuia N+1 - ingekuwa rahisi kuisahau
+     * upande mmoja.
+     */
+    private List<DailyTaskStatusView> withStatus(List<DailyTask> tasks, LocalDate on) {
         if (tasks.isEmpty()) {
             return List.of();
         }
@@ -148,6 +219,9 @@ public class DailyTaskService {
      * isiweze KAMWE kukamilishwa - mtu aliyeifanya kwa kuchelewa
      * asingekuwa na njia ya kuiripoti.
      *
+     * TAREHE ZA NYUMA ZINABAKI ZIKIRUHUSIWA, na tarehe za MBELE
+     * hazikubaliwi - angalia requireNotInTheFuture.
+     *
      * Ukaguzi wa awali HAUCHUKUI nafasi ya UNIQUE: maombi mawili
      * yanayowasili kwa wakati mmoja yote yangepita ukaguzi, na kikwazo
      * cha database ndicho kinachozuia la pili - kikitokeza
@@ -164,7 +238,7 @@ public class DailyTaskService {
             throw new IllegalArgumentException("taskId inahitajika.");
         }
         DailyTask task = requireTaskInCallersFarm(input.taskId());
-        LocalDate on = parseDate(input.completionDate());
+        LocalDate on = requireNotInTheFuture(parseDate(input.completionDate()));
 
         TaskCompletion completion = completionRepository
                 .findByTask_TaskIdAndCompletionDate(task.getTaskId(), on)
@@ -199,9 +273,17 @@ public class DailyTaskService {
      */
     private DailyTaskStatusView view(DailyTask task, LocalDate on, TaskCompletion completion) {
         boolean done = completion != null && TaskCompletion.DONE.equals(completion.getStatus());
+        Cycle cycle = task.getCycle();
         return new DailyTaskStatusView(
                 task.getTaskId(),
-                task.getCycle() == null ? null : task.getCycle().getCycleId(),
+                cycle == null ? null : cycle.getCycleId(),
+                // Tanki na samaki - ndivyo mfanyakazi anavyotofautisha
+                // "Kulisha - Asubuhi" tatu zinazofanana kwenye orodha ya
+                // shamba zima. Null-safe hatua kwa hatua: cycle_id ni
+                // nullable kwenye schema, na kiolezo kisicho na mzunguko
+                // hakina tanki wala aina.
+                cycle == null || cycle.getUnit() == null ? null : cycle.getUnit().getCode(),
+                cycle == null || cycle.getSpecies() == null ? null : cycle.getSpecies().getName(),
                 task.getTaskType(),
                 task.getScheduledTime(),
                 task.getFrequency(),
@@ -247,10 +329,65 @@ public class DailyTaskService {
         return cycle;
     }
 
-    /** Mtindo ule ule wa WaterQualityService: ikiachwa wazi, ni leo. */
+    /**
+     * TAREHE HAIWEZI KUWA YA KESHO.
+     *
+     * =================================================================
+     * KWA NINI TAREHE ZA NYUMA ZINABAKI, ILHALI ZA MBELE HAZIBAKI
+     *
+     * Kuandika NYUMA ni jambo la kawaida shambani, na ndiyo maana
+     * `completionDate` ilikubaliwa tangu mwanzo (angalia
+     * CompleteTaskInput): mfanyakazi anayeandika jioni kazi aliyoifanya
+     * asubuhi, au kesho yake baada ya mtandao kukatika, anaripoti kitu
+     * KILICHOTOKEA. Kukikataa kungemfanya asiwe na njia yoyote ya
+     * kukiripoti - na kazi iliyofanyika ingebaki ikionekana haijafanyika
+     * milele.
+     *
+     * Kuandika MBELE si hivyo hata kidogo: "nilikamilisha kazi ya kesho"
+     * si kauli inayoweza kuwa kweli. Rekodi kama hiyo ingefanya
+     * `findOutstandingForFarm` iipuuze kazi ya kesho kabla haijafika,
+     * hivyo mfanyakazi asingekumbushwa siku yenyewe - na UNIQUE(task_id,
+     * completion_date) ingezuia kuiandika kwa usahihi ikifika. Ni kufuta
+     * siku moja ya kazi kwa kuandika mstari mmoja.
+     * =================================================================
+     *
+     * Ni IllegalArgumentException (yaani BAD_REQUEST/VALIDATION_ERROR
+     * kupitia GraphQlExceptionResolver), si CONFLICT: hakuna
+     * kinachogongana, ombi lenyewe ndilo lisilo na maana.
+     */
+    private LocalDate requireNotInTheFuture(LocalDate on) {
+        LocalDate today = today();
+        if (on.isAfter(today)) {
+            throw new IllegalArgumentException(
+                    "Huwezi kukamilisha kazi kwa tarehe ya baadaye (" + on
+                            + "). Leo ni " + today + ".");
+        }
+        return on;
+    }
+
+    /**
+     * LEO, KWA SAA YA SHAMBANI - si kwa saa ya server.
+     *
+     * `LocalDate.now()` bila kanda inasoma kanda ya JVM, ambayo kwenye
+     * server ya wingu ni UTC. Dodoma ni EAT (UTC+3), hivyo kuanzia saa
+     * 6 usiku hadi saa 9 alfajiri kwa saa ya mkulima, UTC bado iko
+     * JANA. Tofauti hiyo ya saa tatu ndiyo inayoamua tarehe
+     * inayoandikwa kwenye task_completions - na Scheduler tayari
+     * inatumia kanda hii hii (angalia ReminderProperties.zone), hivyo
+     * kuiacha ingekuwa module mbili zikikubaliana kuhusu "leo" kwa saa
+     * 21 kati ya 24.
+     */
+    private LocalDate today() {
+        return LocalDate.now(reminderProperties.zoneId());
+    }
+
+    /**
+     * Mtindo ule ule wa WaterQualityService: ikiachwa wazi, ni leo -
+     * "leo" ya EAT (angalia today()).
+     */
     private LocalDate parseDate(String value) {
         if (value == null || value.isBlank()) {
-            return LocalDate.now();
+            return today();
         }
         try {
             return LocalDate.parse(value);

@@ -14,20 +14,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
-/**
- * B7 - API ya mashamba.
- *
- * Ilihitajika kwa sababu kujisajili HAKUUNDI shamba tena (B3). Bila hii,
- * hakuna njia yoyote ya kuunda shamba kupitia API - na kampuni inaweza
- * kuwa na zaidi ya moja.
- *
- * KUFUTA ni soft-delete, na kunakataliwa shamba likiwa bado na wanachama.
- * Sababu ni ya kiufundi na inayoonekana: safu za `farm_users` zingebaki
- * zikielekeza kwenye shamba ambalo @SQLRestriction inalificha kwenye kila
- * query - watu hao wangebaki na uanachama usio na shamba, na hakuna skrini
- * ingeeleza kwa nini mambo yameacha kufanya kazi. Ondoa watu kwanza, ndipo
- * ombi lilelile lipite.
- */
 @Service
 public class FarmService {
 

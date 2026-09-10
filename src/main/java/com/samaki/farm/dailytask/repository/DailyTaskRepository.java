@@ -69,4 +69,62 @@ public interface DailyTaskRepository extends JpaRepository<DailyTask, Integer> {
             """)
     List<DailyTask> findOutstandingForFarm(@Param("farmId") Integer farmId,
                                            @Param("date") LocalDate date);
+
+    /**
+     * KAZI ZOTE za shamba zima kwa mizunguko INAYOENDELEA - swali la
+     * mfanyakazi anayefungua simu asubuhi.
+     *
+     * =================================================================
+     * NI DADA WA findOutstandingForFarm, TOFAUTI KWA KITU KIMOJA
+     *
+     * Ile inarudisha ZILIZOBAKI pekee (`not exists ... DONE`) kwa sababu
+     * Reminders haina haja ya kukumbusha kazi iliyofanyika. Hii
+     * INAZIRUDISHA ZOTE - kichujio hicho hakipo hapa kwa makusudi.
+     *
+     * Sababu ni ile ile iliyofanya statusForCycle isirudishe zilizobaki
+     * pekee: mfanyakazi anayeona orodha yake anahitaji KUONA kwamba
+     * aliyoifanya imeandikwa. Orodha inayoondoa kazi mara tu
+     * inapokamilishwa inamnyima ushahidi pekee alionao, na inamfanya
+     * ashindwe kutofautisha "nimeifanya" na "nimeisahau".
+     *
+     * `done` HAIKOKOTOLEWI hapa: rekodi zinasomwa kwa query MOJA ya
+     * pamoja (TaskCompletionRepository.findByTask_TaskIdInAndCompletionDate)
+     * na sheria inabaki mahali pake pamoja - DailyTaskService.view.
+     * =================================================================
+     *
+     * KICHUJIO ni kile kile cha findOutstandingForFarm, neno kwa neno,
+     * kikiwa kimepewa majina mafupi (`u.farm.farmId` = `t.cycle.unit.farm
+     * .farmId`, `c.status` = `t.cycle.status`):
+     *
+     *   * UPEO WA SHAMBA umo NDANI ya query, si kwenye kichujio cha Java
+     *     baada ya kusoma - hakuna hatua ambapo kazi za shamba jingine
+     *     zimewahi kuwa mkononi.
+     *   * `status = 'ACTIVE'` inaacha nje mizunguko iliyokwisha vunwa.
+     *     Kiolezo cha daily_tasks hakina tarehe ya mwisho, hivyo bila
+     *     kichujio hiki mzunguko uliovunwa mwaka jana ungeendelea
+     *     kuonekana kwenye orodha ya leo - milele.
+     *
+     * `join fetch` (si path navigation pekee) kwa sababu mkataba sasa
+     * unarudisha `unitCode` na `speciesName`: bila kuvuta, kila mzunguko
+     * ungezalisha SELECT zake za ziada - N+1 ile ile ambayo
+     * findByTask_TaskIdInAndCompletionDate iliwekwa kuizuia upande wa
+     * rekodi.
+     *
+     * MPANGILIO ni (cycle_id, scheduled_time, task_id): shamba lenye
+     * mizunguko mitatu lina "Kulisha - Asubuhi" mara tatu, hivyo kuweka
+     * mzunguko kwanza kunaziweka pamoja badala ya kuzichanganya kwa saa.
+     * task_id ni ya mwisho kwa hoja ile ile ya
+     * findByCycle_CycleIdOrderByScheduledTimeAscTaskIdAsc: orodha
+     * inayobadilika mpangilio kila refresh ni ya kuchanganya shambani.
+     */
+    @Query("""
+            select t from DailyTask t
+            join fetch t.cycle c
+            join fetch c.unit u
+            join fetch c.species
+            where u.farm.farmId = :farmId
+              and c.status = 'ACTIVE'
+            order by c.cycleId asc, t.scheduledTime asc, t.taskId asc
+            """)
+    List<DailyTask> findAllForFarm(@Param("farmId") Integer farmId);
 }

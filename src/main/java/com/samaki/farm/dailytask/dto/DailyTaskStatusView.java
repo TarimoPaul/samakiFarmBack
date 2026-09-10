@@ -36,6 +36,24 @@ import java.time.LocalTime;
  * hapa kwa sababu inahitaji kanda ya saa - Dodoma ni EAT (UTC+3) - na
  * uamuzi huo ni wa Reminders, si wa module hii.
  *
+ * `unitCode` na `speciesName` ni za MWONEKANO WA SHAMBA ZIMA
+ * (farmDailyTasks), na ndiyo maana ziliongezwa.
+ *
+ * Kwenye orodha ya mzunguko MMOJA `cycleId` inatosha - kazi tatu, majina
+ * matatu tofauti. Kwenye orodha ya shamba lenye mizunguko mitatu, hata
+ * hivyo, "Kulisha - Asubuhi" inajitokeza MARA TATU ikiwa imetofautishwa
+ * na namba ya mzunguko PEKEE. Namba si kitu mfanyakazi anachokijua;
+ * anachokijua ni tanki (`DEV-A1`) na samaki waliomo (`Sato`). Bila hizi,
+ * orodha ya shamba zima ni safu za maneno yanayojirudia asiyoweza
+ * kuyafuatanisha na mahali halisi.
+ *
+ * ZOTE MBILI NI ZA HIARI (nullable) kwa makusudi: `daily_tasks.cycle_id`
+ * ni nullable kwenye schema, na njia ya kuzipata ni task -> cycle ->
+ * unit / species. Kiolezo kisicho na mzunguko - au mzunguko usio na
+ * tanki - kinarudisha null badala ya kuvunja query nzima. Ni nyongeza
+ * PEKEE kwenye mkataba: hakuna uga uliopo uliobadilishwa wala
+ * kuondolewa, hivyo mteja wa zamani hagusiki.
+ *
  * `assignedRoleName` inaweza kuwa null, na kwa data iliyopo NI null
  * kila mahali: CycleService.createDefaultTasks haiweki assigned_role_id
  * kabisa. Reminders itahitaji uamuzi kuhusu hilo (angalia ripoti).
@@ -43,6 +61,8 @@ import java.time.LocalTime;
 public record DailyTaskStatusView(
         Integer taskId,
         Integer cycleId,
+        String unitCode,
+        String speciesName,
         String taskType,
         LocalTime scheduledTime,
         String frequency,

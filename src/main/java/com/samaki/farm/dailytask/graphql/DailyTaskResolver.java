@@ -29,6 +29,18 @@ public class DailyTaskResolver {
         return dailyTaskService.statusForCycle(cycleId, date);
     }
 
+    /**
+     * Kazi za SHAMBA ZIMA kwa siku moja - mizunguko yote inayoendelea.
+     *
+     * HAKUNA hoja ya shamba kwa makusudi: farmId inatoka kwenye token
+     * (angalia DailyTaskService.statusForFarm), hivyo hakuna kitu cha
+     * kuthibitisha wala njia ya kuombea shamba lingine.
+     */
+    @QueryMapping
+    public List<DailyTaskStatusView> farmDailyTasks(@Argument String date) {
+        return dailyTaskService.statusForFarm(date);
+    }
+
     @MutationMapping
     public DailyTaskStatusView completeTask(@Argument CompleteTaskInput input) {
         return dailyTaskService.complete(input);

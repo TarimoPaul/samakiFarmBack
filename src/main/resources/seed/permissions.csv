@@ -12,6 +12,12 @@ manage_feed_stock,FARM,FEED,Kununua chakula na kusimamia stoo
 view_feed_stock,FARM,FEED,Kuona salio la stoo na chakula kinachofaa
 view_feed_cost,FARM,FEED,Kuona bei na gharama ya manunuzi ya chakula
 
+# ==================== ASSETS ====================
+# Lango la module NZIMA - kusoma na kuandika (angalia V22). Daftari la
+# mali ni la KAMPUNI: mwombaji anaona mali za mashamba yote aliyo
+# mwanachama wake, si ya shamba moja teule.
+manage_assets,FARM,ASSETS,Kuona na kuandikisha mali za kampuni
+
 # ==================== FINANCE MODULE ====================
 view_finance,FINANCE,REPORTING,Kuona gharama/mauzo/faida
 

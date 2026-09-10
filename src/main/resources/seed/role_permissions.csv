@@ -15,6 +15,7 @@ OWNER,log_feeding
 OWNER,manage_feed_stock
 OWNER,view_feed_stock
 OWNER,view_feed_cost
+OWNER,manage_assets
 
 # FARM_MANAGER - anaendesha uzalishaji na fedha; hasimamii watumiaji,
 # haidhinishi, wala hauandi mashamba
@@ -28,6 +29,9 @@ FARM_MANAGER,log_feeding
 FARM_MANAGER,manage_feed_stock
 FARM_MANAGER,view_feed_stock
 FARM_MANAGER,view_feed_cost
+# Daftari la mali (V22): ndiye anayeandikisha mali za shamba lake, na
+# HANA `manage_farms` - ndiyo maana ruhusa ya kampuni isingefaa hapa.
+FARM_MANAGER,manage_assets
 
 # WORKER - kazi za kila siku pekee (kulisha ni kazi ya shambani, lakini
 # kununua chakula si kazi yake). view_feed_stock: hawezi kulisha bila
@@ -38,6 +42,9 @@ FARM_MANAGER,view_feed_cost
 # HAPATI manage_species (V20): katalogi ya aina HAINA farm_id, hivyo aina
 # anayoiandika mtu mmoja inaonekana kwa MASHAMBA YOTE - si kazi ya
 # shambani. Anaendelea kuisoma kupitia `species` (view_dashboard).
+# HAPATI manage_assets (V22): daftari la mali linajibu swali la kimtaji
+# la mmiliki ("kampuni imewekeza kiasi gani, wapi"), si swali la kazi ya
+# leo. Hakuna kazi ya shambani inayohitaji bei ya generator.
 WORKER,view_dashboard
 WORKER,mark_task_done
 WORKER,log_feeding

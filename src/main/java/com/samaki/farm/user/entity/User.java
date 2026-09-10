@@ -48,7 +48,6 @@ public class User extends BaseEntity {
     @Column(nullable = false)
     private UserStatus status = UserStatus.PENDING_APPROVAL;
 
-    // ROOT bypass flag (kama Lsms): huru na role yoyote - ROOT haihitaji
     // uanachama wowote kuwa na ufikiaji kamili. Angalia PermissionChecker.
     @Column(name = "is_root", nullable = false)
     private Boolean isRoot = false;
