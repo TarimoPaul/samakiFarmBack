@@ -76,22 +76,60 @@ public class Cycle extends BaseEntity {
     @Column(name = "actual_harvest_date")
     private LocalDate actualHarvestDate;
 
-    /** Samaki waliovunwa. NULL hadi mzunguko ufungwe (closeCycle). */
+    /**
+     * Gharama ya vifaranga siku ya kuweka. HIARI - NULL = haikurekodiwa.
+     *
+     * FEDHA: GraphQL inairudisha null kwa asiye na `view_finance` (angalia
+     * CycleResolver.fingerlingCost). Entity yenyewe HAIGUSWI kwa ajili ya
+     * kuficha - angalia FeedPurchaseView kwa kwa nini.
+     */
+    @Column(name = "fingerling_cost")
+    private BigDecimal fingerlingCost;
+
+    /**
+     * Samaki WALIOTOKA WAKIWA HAI - jumla ya matukio ya SOLD + REMOVED
+     * (V25). NULL hadi mzunguko ufungwe.
+     *
+     * HAIPOKELEWI kutoka kwa mwombaji tena: closeCycle inaijumlisha
+     * kutoka harvest_events. Mizunguko iliyofungwa kabla ya V25 inabaki na
+     * namba yao ya mkono (hakuna backfill).
+     */
     @Column(name = "harvested_count")
     private Integer harvestedCount;
 
-    /** Uzito wote wa mavuno (kg). NULL hadi mzunguko ufungwe. */
+    /** Uzito wa SOLD + REMOVED (kg), kutoka matukio. NULL hadi mzunguko ufungwe. */
     @Column(name = "total_weight_kg")
     private BigDecimal totalWeightKg;
+
+    /**
+     * Vifo - jumla ya matukio ya DIED. NULL hadi mzunguko ufungwe.
+     *
+     * Kando ya harvestedCount KWA MAKUSUDI: samaki aliyekufa ametoka
+     * bwawani lakini hakuishi, hivyo HAMO kwenye kiwango cha kuishi.
+     */
+    @Column(name = "mortality_count")
+    private Integer mortalityCount;
+
+    /**
+     * Mapato - jumla ya sale_amount ya matukio ya SOLD. NULL hadi mzunguko
+     * ufungwe; SIFURI kwa mzunguko uliofungwa bila mauzo.
+     *
+     * FEDHA: imefichwa kwa asiye na `view_finance`, kama fingerlingCost.
+     */
+    @Column(name = "total_revenue")
+    private BigDecimal totalRevenue;
 
     /** Maelezo ya mvunaji - hiari kabisa. */
     @Column(name = "harvest_notes")
     private String harvestNotes;
 
     /**
-     * Kiwango cha kuishi KILICHOTOKEA = harvestedCount / fingerlingsCount.
+     * Kiwango cha kuishi KILICHOTOKEA = harvestedCount / fingerlingsCount,
+     * yaani (SOLD + REMOVED) / vifaranga. DIED haimo.
      *
-     * HAIANDIKWI NA MTU YEYOTE, na hilo ndilo lengo. Ni GENERATED ALWAYS
+     * HAIANDIKWI NA MTU YEYOTE, na hilo ndilo lengo. Tangu V25 hata
+     * harvestedCount - kinachogawanywa - hakitoki kwa mwombaji: ni jumla
+     * ya matukio inayokokotolewa na closeCycle. Ni GENERATED ALWAYS
      * ... STORED kwenye V19, hivyo Postgres yenyewe inakataa kila jaribio la
      * kuiandika - si service pekee inayoilinda. insertable/updatable=false
      * inazuia Hibernate kujaribu (ingekuwa kosa la SQL), na @Generated

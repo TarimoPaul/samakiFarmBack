@@ -25,7 +25,11 @@ import java.util.List;
  * kuipata yenyewe: mara ROOT anapochagua shamba, farmId yake huacha kuwa
  * null na kigezo cha "hana shamba" hakitofautishi tena ROOT na mwanachama
  * wa kawaida - kisha kiteuzi kingetoweka mara tu kinapotumika.
+ *
+ * {@code email} iko HAPA pekee, si kwenye UserSummary: ni taarifa ya mtu
+ * mwenyewe (ukurasa wa "Taarifa zangu" unaihitaji ili fomu ionyeshe kilichopo),
+ * si kitu ambacho kila orodha ya wanachama inapaswa kubeba. Inaweza kuwa null.
  */
-public record MeResponse(String id, String name, String phone, String status,
+public record MeResponse(String id, String name, String phone, String email, String status,
                           Integer farmId, String role, List<String> permissions,
                           boolean canSelectFarm) {}

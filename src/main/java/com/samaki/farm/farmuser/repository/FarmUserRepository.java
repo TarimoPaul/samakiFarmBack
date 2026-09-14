@@ -5,6 +5,7 @@ import com.samaki.farm.user.entity.User;
 import com.samaki.farm.user.entity.UserStatus;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -64,6 +65,31 @@ public interface FarmUserRepository extends JpaRepository<FarmUser, FarmUser.Far
     Optional<FarmUser> findByUser_UserIdAndFarm_FarmId(UUID userId, Integer farmId);
 
     boolean existsByUser_UserIdAndFarm_FarmId(UUID userId, Integer farmId);
+
+    /**
+     * Inarudisha uanachama ULIOTOLEWA (soft-deleted), badala ya kuingiza mpya.
+     *
+     * PK ni (user_id, farm_id), na kumtoa mtu kunaacha safu yake ikiwa na
+     * is_deleted = true. existsBy... hapo juu HAIIONI (@SQLRestriction), hivyo
+     * assignMembership ilikuwa inajaribu INSERT na kugonga farm_users_pkey -
+     * mtu aliyetolewa shambani hakuweza kurudishwa kamwe (409 ya "vikwazo vya
+     * database"). Imethibitishwa na MultiFarmMembershipTest.
+     *
+     * Native kwa makusudi: JPQL ingechujwa na @SQLRestriction ile ile na
+     * kutoiona safu inayotafutwa. created_at inabaki - ni historia ya lini
+     * alianza mara ya kwanza; updated_* inasema nani alimrudisha.
+     *
+     * Inarudisha idadi ya safu: 0 = hakukuwa na uanachama uliotolewa.
+     */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query(value = """
+            update farm_users
+               set is_deleted = false, deleted_at = null, deleted_by = null,
+                   role_id = :roleId, updated_at = now(), updated_by = :byUserId
+             where user_id = :userId and farm_id = :farmId and is_deleted = true
+            """, nativeQuery = true)
+    int restoreRemoved(@Param("userId") UUID userId, @Param("farmId") Integer farmId,
+                       @Param("roleId") Integer roleId, @Param("byUserId") UUID byUserId);
 
     /**
      * Watu wangapi wanashikilia nafasi hii - swali la RoleService.deleteRole.

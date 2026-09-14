@@ -1,11 +1,13 @@
 package com.samaki.farm.farmuser.services;
 
+import com.samaki.farm.auth.security.AuthenticatedUser;
 import com.samaki.farm.auth.security.JwtAuthFilter;
 import com.samaki.farm.auth.security.PermissionChecker;
 import com.samaki.farm.common.exception.ConflictException;
 import com.samaki.farm.common.exception.ErrorCodes;
 import com.samaki.farm.farm.entity.Farm;
 import com.samaki.farm.farm.repository.FarmRepository;
+import com.samaki.farm.farmuser.dto.MembershipView;
 import com.samaki.farm.farmuser.entity.FarmUser;
 import com.samaki.farm.farmuser.repository.FarmUserRepository;
 import com.samaki.farm.rbac.entity.Role;
@@ -16,6 +18,7 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -57,14 +60,53 @@ public class FarmUserService {
             throw new ConflictException("Mtumiaji huyu tayari yupo kwenye shamba hili.");
         }
 
+        // Kabla ya kuunda: sheria za nafasi (iliyofutwa/iliyozimwa) zinahusu
+        // kurudishwa pia, si uanachama mpya pekee.
+        Role role = resolveRole(roleId);
+
+        // Aliyewahi kutolewa shamba hili ana safu yake bado (PK ile ile) -
+        // irudishwe, vinginevyo INSERT inagonga farm_users_pkey.
+        int restored = farmUserRepository.restoreRemoved(userId, farmId,
+                role == null ? null : role.getRoleId(), permissionChecker.currentUser().getUserId());
+        if (restored > 0) {
+            JwtAuthFilter.clearUserCache(userId);
+            return;
+        }
+
         FarmUser membership = new FarmUser();
         membership.setUser(user);
         membership.setFarm(farm);
-        membership.setRole(resolveRole(roleId));
+        membership.setRole(role);
         farmUserRepository.save(membership);
 
         // Ruhusa zake zimebadilika - futa cache ili zianze kufanya kazi papo hapo.
         JwtAuthFilter.clearUserCache(userId);
+    }
+
+    /**
+     * Mashamba ya mtu mmoja, pamoja na nafasi yake kwa kila moja.
+     *
+     * NGAZI MBILI, sheria ile ile ya requireSameFarm: msimamizi wa kampuni
+     * (manage_farms/ROOT) anaona uanachama WOTE; msimamizi wa shamba moja
+     * anaona ule wa shamba LAKE tu. Kwake orodha hiyo inajibu "yuko hapa
+     * au hayupo" - haimwonyeshi mashamba mengine asiyoruhusiwa kuyafikia.
+     *
+     * ROOT hana uanachama, hivyo jibu lake ni orodha tupu - si kosa.
+     */
+    @Transactional(readOnly = true)
+    public List<MembershipView> listMemberships(UUID userId) {
+        userRepository.findByUserId(userId)
+                .orElseThrow(() -> new IllegalArgumentException("Mtumiaji hayupo"));
+
+        AuthenticatedUser caller = permissionChecker.currentUser();
+        boolean companyWide = caller.isRoot() || caller.hasPermission("manage_farms");
+
+        return farmUserRepository.findByUser_UserIdOrderByFarm_FarmIdAsc(userId).stream()
+                .filter(m -> companyWide || m.getFarm().getFarmId().equals(caller.getFarmId()))
+                .map(m -> new MembershipView(m.getFarm().getFarmId(), m.getFarm().getName(),
+                        m.getRole() == null ? null : m.getRole().getRoleId(),
+                        m.getRole() == null ? null : m.getRole().getName()))
+                .toList();
     }
 
     /** Kubadilisha role ya mtu kwenye shamba fulani. */

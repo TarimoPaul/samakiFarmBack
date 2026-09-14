@@ -241,24 +241,44 @@ public abstract class IntegrationTest {
         return exchange(HttpMethod.DELETE, path, null, token);
     }
 
+    /** GET ikiwa na kichwa X-Farm-Id - "kwa ombi hili, nafanya kazi shamba hili". */
+    protected ResponseEntity<String> getInFarm(String path, String token, int farmId) {
+        return exchange(HttpMethod.GET, path, null, token, farmId);
+    }
+
     private ResponseEntity<String> exchange(HttpMethod method, String path, String body, String token) {
+        return exchange(method, path, body, token, null);
+    }
+
+    private ResponseEntity<String> exchange(HttpMethod method, String path, String body, String token,
+                                            Integer farmId) {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         if (token != null) {
             headers.setBearerAuth(token);
+        }
+        if (farmId != null) {
+            headers.set("X-Farm-Id", String.valueOf(farmId));
         }
         return rest.exchange(path, method, new HttpEntity<>(body, headers), String.class);
     }
 
     /** Ombi la GraphQL. Kumbuka: hitilafu za resolver zinarudi HTTP 200. */
     protected JsonNode graphql(String token, String query) {
-        String body;
+        return parse(post("/graphql", graphqlBody(query), token));
+    }
+
+    /** GraphQL ikiwa na kichwa X-Farm-Id. */
+    protected JsonNode graphqlInFarm(String token, String query, int farmId) {
+        return parse(exchange(HttpMethod.POST, "/graphql", graphqlBody(query), token, farmId));
+    }
+
+    private String graphqlBody(String query) {
         try {
-            body = json.writeValueAsString(java.util.Map.of("query", query));
+            return json.writeValueAsString(java.util.Map.of("query", query));
         } catch (Exception e) {
             throw new IllegalStateException(e);
         }
-        return parse(post("/graphql", body, token));
     }
 
     /** errorCode ya kwanza kwenye jibu la GraphQL, au null. */

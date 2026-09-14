@@ -4,6 +4,9 @@ view_dashboard,FARM,REPORTING,Kuona dashibodi/ripoti
 edit_cycle,FARM,PRODUCTION,Kuongeza/kuhariri mizunguko ya uzalishaji
 manage_units,FARM,PRODUCTION,Kuongeza/kuhariri matanki/mabwawa
 manage_species,FARM,PRODUCTION,Kuongeza aina za samaki kwenye katalogi
+# Matukio ya mavuno - SOLD/DIED/REMOVED (V26). SI edit_cycle: ni kazi ya
+# kila siku, na kuirekodi hakupaswi kudai mamlaka ya kuunda/kufunga mzunguko.
+record_harvest,FARM,PRODUCTION,Kurekodi mauzo vifo na uhamisho wa samaki
 mark_task_done,FARM,TASKS,Kuweka kazi ya kila siku kuwa imekamilika
 manage_farms,FARM,FARM_MANAGEMENT,Kuunda na kuorodhesha mashamba
 delete_farm,FARM,FARM_MANAGEMENT,Kufuta shamba
@@ -12,14 +15,22 @@ manage_feed_stock,FARM,FEED,Kununua chakula na kusimamia stoo
 view_feed_stock,FARM,FEED,Kuona salio la stoo na chakula kinachofaa
 view_feed_cost,FARM,FEED,Kuona bei na gharama ya manunuzi ya chakula
 
-# ==================== ASSETS ====================
+# ==================== FINANCE MODULE ====================
 # Lango la module NZIMA - kusoma na kuandika (angalia V22). Daftari la
 # mali ni la KAMPUNI: mwombaji anaona mali za mashamba yote aliyo
 # mwanachama wake, si ya shamba moja teule.
-manage_assets,FARM,ASSETS,Kuona na kuandikisha mali za kampuni
-
-# ==================== FINANCE MODULE ====================
+#
+# FINANCE, si FARM (V27): daftari ni swali la KIMTAJI, na sidebar
+# inaliweka pamoja na gharama za uendeshaji chini ya "Fedha". Ruhusa
+# yenyewe haikubadilika - `module` hupanga visanduku vya skrini ya
+# Nafasi na Ruhusa tu.
+manage_assets,FINANCE,ASSETS,Kuona na kuandikisha mali za kampuni
+# view_finance ni ya KUSOMA RIPOTI (gharama + mauzo + faida pamoja), na
+# bado haijatumiwa na msimbo wowote - inasubiri ripoti hiyo. manage_costs
+# (V24) ni lango la daftari la gharama lenyewe: kusoma NA kuandika, kama
+# manage_assets. Angalia V24 kwa kwa nini hazikuunganishwa.
 view_finance,FINANCE,REPORTING,Kuona gharama/mauzo/faida
+manage_costs,FINANCE,COSTS,Kuona na kurekodi gharama za uendeshaji
 
 # ==================== UAA MODULE ====================
 manage_users,UAA,USER_MANAGEMENT,Kusimamia watumiaji/roles/ruhusa

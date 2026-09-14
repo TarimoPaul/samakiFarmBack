@@ -187,6 +187,11 @@ public final class ErrorCodes {
      * Haipitiki kwa kujaribu tena: mzunguko uliofungwa umebaki hivyo.
      * Frontend inaitumia kutofautisha "umeshafanya hili" na kosa la data
      * ambalo mtumiaji anaweza kulirekebisha.
+     *
+     * Tangu V25 inarudishwa pia na recordHarvestEvent/deleteHarvestEvent
+     * kwa mzunguko uliofungwa: jumla za kufunga zimetoka kwenye matukio ya
+     * siku ile, na tukio jipya (au lililofutwa) lingezifanya zisilingane
+     * na historia. Maana ni ile ile - "mzunguko huu umekwisha".
      */
     public static final String CYCLE_ALREADY_CLOSED = "CYCLE_ALREADY_CLOSED";
 

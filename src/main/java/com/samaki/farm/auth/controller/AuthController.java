@@ -5,16 +5,22 @@ import com.samaki.farm.auth.dto.ForgotPasswordRequest;
 import com.samaki.farm.auth.dto.LoginRequest;
 import com.samaki.farm.auth.dto.LoginResponse;
 import com.samaki.farm.auth.dto.MeResponse;
+import com.samaki.farm.auth.dto.MyFarm;
 import com.samaki.farm.auth.dto.RegisterRequest;
 import com.samaki.farm.auth.dto.RegistrationResponse;
 import com.samaki.farm.auth.dto.ResetPasswordRequest;
+import com.samaki.farm.auth.security.AuthenticatedUser;
 import com.samaki.farm.auth.security.PermissionChecker;
 import com.samaki.farm.auth.services.AuthService;
 import com.samaki.farm.common.web.ApiResponse;
 import com.samaki.farm.common.web.ClientIp;
+import com.samaki.farm.user.dto.UpdateUserRequest;
+import com.samaki.farm.user.services.UserService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 /**
  * REST pekee - Auth. Controller hii ni HTTP tu: kupokea request, kuita
@@ -27,10 +33,13 @@ import org.springframework.web.bind.annotation.*;
 public class AuthController {
 
     private final AuthService authService;
+    private final UserService userService;
     private final PermissionChecker permissionChecker;
 
-    public AuthController(AuthService authService, PermissionChecker permissionChecker) {
+    public AuthController(AuthService authService, UserService userService,
+                          PermissionChecker permissionChecker) {
         this.authService = authService;
+        this.userService = userService;
         this.permissionChecker = permissionChecker;
     }
 
@@ -99,5 +108,35 @@ public class AuthController {
     @GetMapping("/me")
     public ApiResponse<MeResponse> me() {
         return ApiResponse.ok(authService.describeCurrentUser(permissionChecker.currentUser()));
+    }
+
+    /**
+     * Mashamba ambayo mwombaji anaweza kuyachagua kwenye kiteuzi.
+     *
+     * ROOT: mashamba yote. Mwanachama: yale aliyo mwanachama wake tu - ndiyo
+     * pekee ambayo JwtAuthFilter itakubali kwenye X-Farm-Id. Hakuna ruhusa
+     * maalum: kila mtu anaweza kujua mashamba yake mwenyewe.
+     */
+    @GetMapping("/my-farms")
+    public ApiResponse<List<MyFarm>> myFarms() {
+        return ApiResponse.ok(authService.myFarms(permissionChecker.currentUser()));
+    }
+
+    /**
+     * Mtumiaji anarekebisha jina, simu na barua pepe YAKE mwenyewe.
+     *
+     * HAKUNA @PreAuthorize: si ruhusa ya kusimamia watu (hiyo ni
+     * PUT /api/users/{id}, manage_users) - ni kila mtu kwa nafsi yake.
+     * userId inatoka kwenye token, hivyo hakuna njia ya kumlenga mtu mwingine.
+     * SecurityConfig tayari inaitaka token kwa /api/auth/me (kila method).
+     *
+     * Jibu ni /me upya, si UserSummary: mteja anahifadhi jibu hilo kama
+     * mtumiaji wa sasa, na kulirudisha hapa kunaepusha ombi la pili.
+     */
+    @PutMapping("/me")
+    public ApiResponse<MeResponse> updateMe(@Valid @RequestBody UpdateUserRequest req) {
+        AuthenticatedUser caller = permissionChecker.currentUser();
+        userService.updateOwnProfile(caller.getUserId(), req);
+        return ApiResponse.ok(authService.describeCurrentUser(caller), "Taarifa zako zimehifadhiwa.");
     }
 }

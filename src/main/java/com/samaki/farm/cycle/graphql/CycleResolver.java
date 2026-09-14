@@ -3,12 +3,14 @@ package com.samaki.farm.cycle.graphql;
 import com.samaki.farm.cycle.dto.CreateCycleInput;
 import com.samaki.farm.cycle.entity.Cycle;
 import com.samaki.farm.cycle.services.CycleService;
+import com.samaki.farm.cycle.services.FinanceVisibility;
 import org.springframework.graphql.data.method.annotation.Argument;
 import org.springframework.graphql.data.method.annotation.MutationMapping;
 import org.springframework.graphql.data.method.annotation.QueryMapping;
 import org.springframework.graphql.data.method.annotation.SchemaMapping;
 import org.springframework.stereotype.Controller;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 /**
@@ -19,9 +21,11 @@ import java.util.List;
 public class CycleResolver {
 
     private final CycleService cycleService;
+    private final FinanceVisibility financeVisibility;
 
-    public CycleResolver(CycleService cycleService) {
+    public CycleResolver(CycleService cycleService, FinanceVisibility financeVisibility) {
         this.cycleService = cycleService;
+        this.financeVisibility = financeVisibility;
     }
 
     @QueryMapping
@@ -46,19 +50,32 @@ public class CycleResolver {
      * Hoja tambulifu (si input type) kwa mfuatano ule ule wa schema -
      * mtindo ule ule wa createFeedType/updateFeedType.
      *
-     * HAKUNA `survivalRate` hapa, na hiyo ni sehemu ya mkataba:
-     * actualSurvivalRate inakokotolewa na database kutoka harvestedCount
-     * na fingerlingsCount (angalia V19), hivyo hakuna njia ya mteja
-     * kuipandikiza - kama ilivyo kwa FeedPurchase.totalCost.
+     * HAKUNA `survivalRate` hapa, WALA idadi, uzito au mapato (V25):
+     * zote zinajumlishwa kutoka matukio ya mavuno na CycleService, na
+     * actualSurvivalRate inakokotolewa na database kutoka kwa jumla hiyo.
+     * Hakuna namba ya mteja inayoingia kwenye matokeo ya mzunguko.
      */
     @MutationMapping
     public Cycle closeCycle(@Argument Integer cycleId,
                              @Argument String outcome,
                              @Argument String actualHarvestDate,
-                             @Argument Integer harvestedCount,
-                             @Argument Double totalWeightKg,
                              @Argument String notes) {
-        return cycleService.closeCycle(cycleId, outcome, actualHarvestDate,
-                harvestedCount, totalWeightKg, notes);
+        return cycleService.closeCycle(cycleId, outcome, actualHarvestDate, notes);
+    }
+
+    // ---- FEDHA: null bila `view_finance` - angalia FinanceVisibility ----
+    //
+    // Resolver za UGA, si za query: `Cycle` inafikiwa pia kupitia
+    // createCycle, closeCycle na FeedingLog.cycle (ya WORKER). Uga
+    // ukiombwa kwa njia yoyote, unapita hapa.
+
+    @SchemaMapping(typeName = "Cycle", field = "fingerlingCost")
+    public BigDecimal fingerlingCost(Cycle cycle) {
+        return financeVisibility.visible(cycle.getFingerlingCost());
+    }
+
+    @SchemaMapping(typeName = "Cycle", field = "totalRevenue")
+    public BigDecimal totalRevenue(Cycle cycle) {
+        return financeVisibility.visible(cycle.getTotalRevenue());
     }
 }

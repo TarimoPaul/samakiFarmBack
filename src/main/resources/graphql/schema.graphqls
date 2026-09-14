@@ -2,6 +2,22 @@ type Query {
     productionUnits: [ProductionUnit!]!
     cycles(status: String): [Cycle!]!
 
+    # Hali ya shamba TAREHE MOJA mahususi - dashibodi ya "siku ile".
+    #
+    # HAKUNA jedwali la historia nyuma yake, wala migration. Kila namba
+    # inakokotolewa kutoka kwa data iliyopo: `created_at`/`deleted_at` za
+    # vitengo na uanachama, na `stocking_date`/`actual_harvest_date` za
+    # mizunguko. Status ya kitengo inaendeshwa na mizunguko PEKEE (angalia
+    # CycleService), hivyo "kilikuwa ACTIVE" ni sawa kabisa na "kilikuwa na
+    # mzunguko unaoendelea".
+    #
+    # Kwa sababu inakokotolewa badala ya kukusanywa, inafanya kazi kwa tarehe
+    # ZA NYUMA pia - mfumo wa kukusanya historia ungeanza leo na tarehe za
+    # nyuma zingebaki tupu milele.
+    #
+    # `view_dashboard` + muktadha wa shamba: ruhusa ile ile ya dashibodi ya leo.
+    dashboardOnDate(date: String!): DashboardDay!
+
     # Katalogi ya kimfumo - inahitajika kujaza speciesId ya CreateCycleInput
     species: [Species!]!
 
@@ -69,6 +85,38 @@ type Query {
     # itakayoandikishwa, na uga zilezile mbili ndizo zinazohitajika.
     myFarms: [AssetFarm!]!
 
+    # ---------- Gharama za uendeshaji ----------
+    # DAFTARI LA GHARAMA LA KAMPUNI NZIMA - si la shamba moja, kama
+    # `assets`. Kila mstari unabeba shamba lake NA mzunguko wake (ikiwa
+    # unao), kwa sababu orodha inavuka mashamba.
+    #
+    # JUMLA NI KAZI YA FRONTEND kwa makusudi - hakuna endpoint ya
+    # kujumlisha kwa mzunguko wala kwa shamba (angalia CostResolver).
+    #
+    # `manage_costs` (V24 - OWNER/FARM_MANAGER). Mwombaji asiye na shamba
+    # lolote anapata orodha TUPU, si hitilafu.
+    costs: [Cost!]!
+
+    # Katalogi ya aina za gharama, kwa fomu ya kurekodi. `manage_costs`.
+    costCategories: [CostCategory!]!
+
+    # KICHAGUA-MZUNGUKO cha fomu ya gharama: mizunguko ya shamba MOJA,
+    # INAYOENDELEA NA ILIYOFUNGWA.
+    #
+    # SI `cycles` hapo juu, na tofauti ni mbili. (1) `cycles` ni ya
+    # shamba TEULE la mwombaji (requireFarmScope), ilhali fomu ya gharama
+    # inaruhusu kuchagua lolote kati ya mashamba yake - mmiliki wa
+    # mashamba mawili asingepata mizunguko ya la pili kabisa. (2) Hapa
+    # kila chaguo linakuja na LEBO iliyokwisha jengwa (angalia CycleRef).
+    #
+    # ILIYOFUNGWA IMO kwa makusudi: bili ya Machi inalipwa Aprili, mara
+    # nyingi baada ya mzunguko kuvunwa. Kichagua kisichoonyesha
+    # iliyofungwa kingelazimisha gharama hiyo kuwa ya shamba zima.
+    #
+    # `manage_costs`, na farmId lazima iwe ya mwombaji (FORBIDDEN
+    # vinginevyo).
+    farmCycles(farmId: Int!): [CycleRef!]!
+
     # Kinachopotea aina hii ikizimwa, KWA SHAMBA LA MWOMBAJI. Ni ONYO la
     # kabla ya kubofya - setFeedTypeActive HAIKATAI kuzima kwa sababu ya
     # namba hizi (angalia FeedTypeDeactivationImpact hapo chini).
@@ -80,6 +128,12 @@ type Query {
     # vipimo vya tanki analomoendeshea mzunguko huo (jedwali halina
     # cycle_id - angalia WaterQualityService).
     waterQualityLogs(unitId: Int, cycleId: Int): [WaterQualityLog!]!
+
+    # ---------- Matukio ya mavuno ----------
+    # Matukio ya mzunguko mmoja, mapya kwanza - wa kuendelea NA uliofungwa.
+    # `view_dashboard`, kama `cycles`; mzunguko lazima uwe wa shamba la
+    # mwombaji (FORBIDDEN). saleAmount inarudi null bila `view_finance`.
+    harvestEvents(cycleId: Int!): [HarvestEvent!]!
 
     # ---------- Daily Tasks ----------
     # Kazi ZOTE za mzunguko kwa siku moja, kila moja ikiwa na `done` yake.
@@ -108,11 +162,23 @@ type Mutation {
     # inayofanya hivi; `expectedHarvestDate` ni utabiri, si kichocheo.
     #
     # `outcome`: HARVESTED au FAILED (si ACTIVE - hii ni ya kufunga).
-    # harvestedCount/totalWeightKg ni LAZIMA: zaidi ya sifuri kwa
-    # HARVESTED, na sifuri inaruhusiwa kwa FAILED.
     #
-    # Mzunguko uliokwisha fungwa unakataliwa kwa CYCLE_ALREADY_CLOSED -
-    # mavuno yanatokea mara moja.
+    # MKATABA ULIBADILIKA (V25): HAKUNA harvestedCount wala totalWeightKg
+    # tena. Jumla zote zinajumlishwa kutoka matukio ya mavuno
+    # (recordHarvestEvent) wakati wa kufunga:
+    #   harvestedCount = SOLD + REMOVED   (waliotoka WAKIWA HAI)
+    #   mortalityCount = DIED
+    #   totalWeightKg  = uzito wa SOLD + REMOVED
+    #   totalRevenue   = saleAmount ya SOLD
+    # HARVESTED inahitaji angalau samaki mmoja wa SOLD/REMOVED
+    # (VALIDATION_ERROR vinginevyo - tumia FAILED). FAILED inakubali
+    # mzunguko usio na tukio lolote.
+    #
+    # actualHarvestDate: SI kabla ya kuweka, wala kabla ya tukio la mwisho.
+    #
+    # KUFUNGA NI KWA MWISHO: mzunguko uliokwisha fungwa unakataliwa kwa
+    # CYCLE_ALREADY_CLOSED, na baada ya hapo matukio hayarekodiwi wala
+    # kufutwa. Hakuna kufungua upya.
     #
     # `edit_cycle`, ILE ILE ya createCycle. Hakuna ruhusa mpya.
     #
@@ -122,10 +188,39 @@ type Mutation {
         cycleId: Int!
         outcome: String!
         actualHarvestDate: String!
-        harvestedCount: Int!
-        totalWeightKg: Float!
         notes: String
     ): Cycle!
+
+    # ---------- Matukio ya mavuno ----------
+    # Samaki waliotoka kwenye bwawa: SOLD (wameuzwa), DIED (wamekufa),
+    # REMOVED (wametolewa wakiwa hai bila kuuzwa). Hakuna sababu nyingine
+    # (VALIDATION_ERROR ikiorodhesha tatu hizi).
+    #
+    # `record_harvest` (V26 - OWNER/FARM_MANAGER pekee). Mzunguko lazima
+    # uwe wa shamba la mwombaji (FORBIDDEN) na UNAOENDELEA
+    # (CYCLE_ALREADY_CLOSED).
+    #
+    # eventDate: YYYY-MM-DD, si kabla ya kuweka, si ya baadaye.
+    # fishCount: > 0. HAIKATALIWI ikizidi fingerlingsCount - kuhesabu
+    #   samaki si sayansi kamili (kuishi kunaweza kuzidi 1.0).
+    # weightKg: LAZIMA (> 0) kwa SOLD; hiari kwa DIED/REMOVED (> 0
+    #   ikitolewa).
+    # saleAmount: LAZIMA (> 0) kwa SOLD. Kwa DIED/REMOVED: null au 0
+    #   inakubalika na inahifadhiwa kama null; kiasi kingine chochote
+    #   kinakataliwa.
+    recordHarvestEvent(
+        cycleId: Int!
+        eventDate: String!
+        fishCount: Int!
+        weightKg: Float
+        reason: String!
+        saleAmount: Float
+    ): HarvestEvent!
+
+    # Soft-delete ya tukio lililokosewa - kwa mzunguko UNAOENDELEA pekee
+    # (CYCLE_ALREADY_CLOSED vinginevyo). Kurekebisha = kufuta + kurekodi
+    # upya. `record_harvest`. Inarudisha `true`; kushindwa ni hitilafu.
+    deleteHarvestEvent(harvestEventId: Int!): Boolean!
 
     # ---------- Feed ----------
     recordFeedPurchase(input: RecordFeedPurchaseInput!): FeedPurchase!
@@ -199,6 +294,40 @@ type Mutation {
     # yake ipo, na `asset_categories.name` ni UNIQUE).
     createAssetCategory(name: String!): AssetCategory!
 
+    # ---------- Gharama za uendeshaji ----------
+    # Kurekodi gharama. `manage_costs` (V24 - OWNER/FARM_MANAGER pekee).
+    #
+    # farmId: LAZIMA, na LAZIMA liwe mojawapo ya mashamba ya mwombaji -
+    #   FORBIDDEN vinginevyo. Sheria ile ile ya createAsset.
+    #
+    # cycleId: HIARI, na hapa ndipo module hii inapotofautiana na mali.
+    #   Ikiachwa wazi (null) -> gharama ya SHAMBA ZIMA: umeme, mshahara,
+    #   kodi - vitu visivyogawanyika kwa mzunguko. Ikitolewa -> gharama
+    #   ya mzunguko HUO, na mzunguko LAZIMA uwe wa `farmId` iliyotajwa
+    #   (VALIDATION_ERROR vinginevyo - jibu lile lile kwa mzunguko usiopo
+    #   na wa shamba jingine, ili idadi ya mizunguko ya mashamba mengine
+    #   isivuje). Mzunguko ULIOFUNGWA unakubalika: bili inalipwa baada ya
+    #   mavuno mara nyingi.
+    #
+    # amount: zaidi ya sifuri (VALIDATION_ERROR vinginevyo). NUMERIC(14,2).
+    # costDate: YYYY-MM-DD, HAIWEZI kuwa ya baadaye - gharama
+    #   isiyotokea bado ni bajeti, si matumizi. Ya nyuma ni ya kawaida
+    #   kabisa (bili ya Machi inaingizwa Aprili).
+    # description: hiari, maandishi huru ("LUKU ya Machi").
+    createCost(
+        farmId: Int!
+        cycleId: Int
+        costCategoryId: Int!
+        amount: Float!
+        costDate: String!
+        description: String
+    ): Cost!
+
+    # Aina mpya kwenye katalogi ya kimfumo ya gharama. Jina la kipekee -
+    # CONFLICT ikiwa limechukuliwa, IKIWEMO na aina iliyofutwa (safu
+    # yake ipo, na `cost_categories.name` ni UNIQUE).
+    createCostCategory(name: String!): CostCategory!
+
     # ---------- Water Quality ----------
     logWaterQuality(input: LogWaterQualityInput!): WaterQualityLog!
 
@@ -213,6 +342,61 @@ type ProductionUnit {
     sizeM3: Float
     waterSource: String
     status: String!
+}
+
+# Vitengo vya aina moja vilivyokuwepo tarehe iliyoulizwa.
+type UnitTypeCount {
+    type: String!
+    count: Int!
+}
+
+# Jibu la `dashboardOnDate` - hali ya shamba siku moja.
+type DashboardDay {
+    # Tarehe iliyoulizwa, ikirudishwa ili UI isilinganishe na iliyoomba.
+    date: String!
+
+    # Vitengo vilivyokuwepo siku hiyo (viliundwa kabla yake na havikuwa
+    # vimefutwa bado). Kitengo kilichofutwa jana KILIKUWEPO wiki iliyopita.
+    unitsExisting: Int!
+
+    # Vilivyokuwa na mzunguko unaoendelea siku hiyo.
+    unitsActive: Int!
+
+    # Vilivyobaki. MAINTENANCE haipo hapa kwa sababu hakuna msimbo wowote
+    # unaoiandika - ikija, itabidi igawanywe.
+    unitsIdle: Int!
+
+    # Ujazo wa vitengo vilivyokuwepo siku hiyo.
+    totalVolumeM3: Float!
+
+    cyclesRunning: Int!
+    cyclesStarted: Int!
+    cyclesClosed: Int!
+
+    # Vifaranga walio ndani ya mizunguko ILIYOKUWA INAENDELEA - hifadhi.
+    # Hii ndiyo inayolingana na tile ya dashibodi ya leo.
+    fingerlingsRunning: Int!
+
+    # Vifaranga walioingizwa SIKU HIYO - mtiririko. Kitu kingine kabisa, na
+    # kuzichanganya kungebadilisha maana ya namba bila mtu kujua.
+    fingerlingsStocked: Int!
+
+    # Wanachama wa shamba siku hiyo (farm_users ni soft-delete, hivyo
+    # aliyeondolewa bado anahesabiwa kwa tarehe alizokuwepo).
+    members: Int!
+
+    # Vitengo kwa AINA, siku hiyo. Aina isiyo na kitengo siku hiyo HAIPO
+    # kwenye orodha - mteja anajaza sifuri kutoka kwa orodha yake ya aina,
+    # ili kadi isibadilike umbo kulingana na data iliyopo.
+    unitsByType: [UnitTypeCount!]!
+
+    # Tarehe ya kwanza tuliyo na rekodi yake kwa shamba hili.
+    historyStartsOn: String
+
+    # false = tarehe iliyoulizwa iko KABLA ya rekodi yetu ya kwanza. Namba
+    # zote hapo juu ni sifuri, na sifuri hiyo ina maana ya "hatujui", si
+    # "hapakuwa na kitu". UI lazima itofautishe hizo mbili.
+    historyComplete: Boolean!
 }
 
 input CreateProductionUnitInput {
@@ -280,6 +464,74 @@ type AssetCategory {
     name: String!
 }
 
+# ============================================================
+# GHARAMA ZA UENDESHAJI (costs) - V23/V24
+#
+# Mali ni MTAJI (kitu kilichonunuliwa kikabaki); gharama ni UENDESHAJI
+# (fedha iliyotoka ikaisha). Madaftari yote mawili ni ya kampuni nzima
+# na yanasomwa vivyo hivyo, lakini hii ina safu ambayo ile haina:
+# MZUNGUKO, wa hiari.
+# ============================================================
+
+# Gharama moja - bili ya umeme, mafuta, mshahara, dawa.
+type Cost {
+    costId: ID!
+
+    # SHAMBA LA GHARAMA HII. Ipo kwenye kila mstari kwa sababu orodha
+    # inavuka mashamba - ndiyo lebo inayoruhusu frontend kupanga na
+    # kujumlisha kwa shamba. Ni aina ile ile ya `Asset.farm`.
+    farm: AssetFarm!
+
+    # MZUNGUKO, IKIWA GHARAMA HII NI YAKE. Null = gharama ya SHAMBA
+    # ZIMA (umeme wa mwezi, mshahara wa mlinzi) - si data
+    # iliyokosekana, ni aina nyingine ya gharama. Ndiyo maana si `!`.
+    #
+    # Frontend inaweza kujumlisha kwa njia MBILI kutoka orodha moja:
+    # gharama za mzunguko (mistari yenye `cycle`) na gharama zote za
+    # shamba (mistari YOTE ya shamba hilo).
+    cycle: CycleRef
+
+    costCategory: CostCategory!
+
+    # Kiasi (NUMERIC(14,2)). Daima > 0.
+    amount: Float!
+
+    # YYYY-MM-DD. Kamwe si ya baadaye.
+    costDate: String!
+
+    description: String
+}
+
+# Aina ya gharama. Katalogi YA KIMFUMO (haina farm_id), kama
+# AssetCategory, FeedType na Species - mashamba yote yanaisoma ile ile.
+#
+# NI YA KUUNDWA NA MTUMIAJI, si enum, kwa hoja ile ile ya AssetCategory:
+# orodha ya vitu shamba linavyoweza kutumia fedha haina mwisho, na
+# "Nyingine" ya enum ndilo hasa kundi ambalo mkulima anataka
+# kulichambua.
+type CostCategory {
+    costCategoryId: ID!
+    name: String!
+}
+
+# Mzunguko kama LEBO ya kuchagua, si rasilimali kamili (linganisha na
+# `Cycle`, yenye uga kumi na mbili). Inatumiwa na pande mbili za kitu
+# kimoja: `farmCycles` (orodha ya kudondosha) na `Cost.cycle` (mstari
+# uliohifadhiwa) - maandishi yale yale mahali pote.
+type CycleRef {
+    cycleId: ID!
+
+    # "T1 - Sato (ACTIVE)". Inajengwa backend kwa sababu vipande vyake
+    # vitatu vinatoka majedwali matatu tofauti (production_units,
+    # species, cycles) - kila skrini ingeviunganisha yenyewe, au tofauti.
+    label: String!
+
+    # ACTIVE / HARVESTED / FAILED. Imo kwenye lebo tayari; inarudishwa
+    # peke yake pia ili frontend iweze kupanga au kufifisha bila
+    # kuchambua maandishi.
+    status: String!
+}
+
 type Species {
     speciesId: ID!
     name: String!
@@ -310,15 +562,29 @@ type Cycle {
     # "wanakaribia kuvunwa"; KUFUNGA NI KAZI YA MTU (closeCycle).
     expectedHarvestDate: String
 
+    # Gharama ya vifaranga (hiari - null = haikurekodiwa). FEDHA: null
+    # bila `view_finance`, kwa kila njia inayofikia Cycle.
+    fingerlingCost: Float
+
     # ---- Zinajazwa na closeCycle pekee; null kwa mzunguko unaoendelea ----
+    # Zote zinajumlishwa kutoka matukio ya mavuno (V25), si kutoka kwa
+    # mwombaji. Mizunguko iliyofungwa kabla ya V25 inabaki na namba zao
+    # za mkono, na mortalityCount/totalRevenue null (hakuna backfill).
     actualHarvestDate: String
+    # Samaki waliotoka WAKIWA HAI: SOLD + REMOVED.
     harvestedCount: Int
+    # Uzito wa SOLD + REMOVED (kg).
     totalWeightKg: Float
+    # Vifo: DIED. Havimo kwenye harvestedCount wala kuishi.
+    mortalityCount: Int
+    # Jumla ya saleAmount ya SOLD. FEDHA: null bila `view_finance`.
+    totalRevenue: Float
     harvestNotes: String
 
-    # KILICHOTOKEA: harvestedCount / fingerlingsCount, kikokotolewa na
-    # database (V19). HAKIPOKELEWI kama input popote - hakuna mutation
-    # yenye uga wake, na Postgres yenyewe inakataa kuiandika.
+    # KILICHOTOKEA: harvestedCount / fingerlingsCount = (SOLD + REMOVED) /
+    # vifaranga, kikokotolewa na database (V19). HAKIPOKELEWI kama input
+    # popote - hakuna mutation yenye uga wake, na Postgres yenyewe
+    # inakataa kuiandika.
     actualSurvivalRate: Float
 
     # ACTIVE / HARVESTED / FAILED
@@ -336,6 +602,24 @@ input CreateCycleInput {
     # LAZIMA iwe chini ya umri wa kuvunwa wa aina husika
     # (species.growthMonthsAvg) - vinginevyo VALIDATION_ERROR.
     stockingAgeMonths: Int
+
+    # Hiari: gharama ya vifaranga. Ikitolewa lazima iwe > 0
+    # (VALIDATION_ERROR vinginevyo). NUMERIC(14,2).
+    fingerlingCost: Float
+}
+
+# Tukio moja la samaki kutoka kwenye bwawa (V25).
+type HarvestEvent {
+    harvestEventId: ID!
+    cycleId: Int!
+    eventDate: String!
+    fishCount: Int!
+    # Null inawezekana kwa DIED/REMOVED pekee.
+    weightKg: Float
+    # SOLD / DIED / REMOVED
+    reason: String!
+    # Kwa SOLD pekee (null kwa nyingine). FEDHA: null bila `view_finance`.
+    saleAmount: Float
 }
 
 # ============================================================

@@ -5,6 +5,7 @@ import com.samaki.farm.auth.dto.ForgotPasswordRequest;
 import com.samaki.farm.auth.dto.LoginRequest;
 import com.samaki.farm.auth.dto.LoginResponse;
 import com.samaki.farm.auth.dto.MeResponse;
+import com.samaki.farm.auth.dto.MyFarm;
 import com.samaki.farm.auth.dto.RegisterRequest;
 import com.samaki.farm.auth.dto.RegistrationResponse;
 import com.samaki.farm.auth.dto.ResetPasswordRequest;
@@ -16,6 +17,7 @@ import com.samaki.farm.common.exception.ErrorCodes;
 import com.samaki.farm.common.exception.ForbiddenException;
 import com.samaki.farm.common.exception.UnauthorizedException;
 import com.samaki.farm.common.ratelimit.RateLimiter;
+import com.samaki.farm.farm.repository.FarmRepository;
 import com.samaki.farm.farmuser.entity.FarmUser;
 import com.samaki.farm.farmuser.repository.FarmUserRepository;
 import com.samaki.farm.rbac.entity.Permission;
@@ -57,6 +59,7 @@ public class AuthService {
 
     private final UserRepository userRepository;
     private final FarmUserRepository farmUserRepository;
+    private final FarmRepository farmRepository;
     private final PermissionRepository permissionRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
@@ -64,11 +67,12 @@ public class AuthService {
     private final RateLimiter rateLimiter;
 
     public AuthService(UserRepository userRepository, FarmUserRepository farmUserRepository,
-                        PermissionRepository permissionRepository,
+                        FarmRepository farmRepository, PermissionRepository permissionRepository,
                         PasswordEncoder passwordEncoder, JwtUtil jwtUtil,
                         PasswordResetService passwordResetService, RateLimiter rateLimiter) {
         this.userRepository = userRepository;
         this.farmUserRepository = farmUserRepository;
+        this.farmRepository = farmRepository;
         this.permissionRepository = permissionRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtUtil = jwtUtil;
@@ -243,9 +247,34 @@ public class AuthService {
                 ? permissionRepository.findAll().stream().map(Permission::getCode).sorted().toList()
                 : principal.getPermissions().stream().sorted().toList();
 
+        // Kiteuzi kinaonekana kwa ROOT, na kwa mwanachama mwenye mashamba
+        // ZAIDI YA MOJA - kwake kuna kitu cha kuchagua. Mwenye shamba moja
+        // hana, na kiteuzi chenye chaguo moja ni kelele tu.
+        boolean canSelectFarm = principal.isRoot()
+                || farmUserRepository.findFarmIdsByUserId(principal.getUserId()).size() > 1;
+
         return new MeResponse(user.getUserId().toString(), user.getName(), user.getPhone(),
-                user.getStatus().name(), principal.getFarmId(), principal.getRoleName(),
-                permissions, principal.isRoot());
+                user.getEmail(), user.getStatus().name(), principal.getFarmId(), principal.getRoleName(),
+                permissions, canSelectFarm);
+    }
+
+    /**
+     * Mashamba ya kiteuzi: yote kwa ROOT, ya uanachama wake kwa wengine.
+     *
+     * Sheria ni ile ile ya JwtAuthFilter.withSelectedFarm - kiteuzi
+     * kisionyeshe shamba ambalo filter ingelipuuza.
+     */
+    @Transactional(readOnly = true)
+    public List<MyFarm> myFarms(AuthenticatedUser principal) {
+        if (principal.isRoot()) {
+            return farmRepository.findAll().stream()
+                    .map(farm -> new MyFarm(farm.getFarmId(), farm.getName(), null))
+                    .toList();
+        }
+        return farmUserRepository.findByUser_UserIdOrderByFarm_FarmIdAsc(principal.getUserId()).stream()
+                .map(m -> new MyFarm(m.getFarm().getFarmId(), m.getFarm().getName(),
+                        m.getRole() == null ? null : m.getRole().getName()))
+                .toList();
     }
 
     /**

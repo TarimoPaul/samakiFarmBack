@@ -32,7 +32,9 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import java.io.IOException;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -78,7 +80,13 @@ public class JwtAuthFilter extends OncePerRequestFilter {
      *
      * `status == null` inamaanisha mtu hayupo au amefutwa (soft-delete).
      */
-    private record Account(AuthenticatedUser principal, UserStatus status, boolean mustChangePassword) {}
+    private record Account(AuthenticatedUser principal, UserStatus status, boolean mustChangePassword,
+                           Map<Integer, AuthenticatedUser> byFarm) {
+
+        private Account(AuthenticatedUser principal, UserStatus status, boolean mustChangePassword) {
+            this(principal, status, mustChangePassword, Map.of());
+        }
+    }
 
     // Cache ya kila mtumiaji - inaepusha kusoma DB kwenye kila request
     private record CachedAccount(Account account, long timestamp) {}
@@ -222,11 +230,18 @@ public class JwtAuthFilter extends OncePerRequestFilter {
      * kwamba shamba la ROOT halijulikani, na hapa limetajwa wazi na ROOT
      * mwenyewe.
      *
-     * ROOT PEKEE. Mwenye 'manage_farms' asiye ROOT haruhusiwi kuchagua shamba
-     * lingine: ruhusa ya kampuni inafungua USIMAMIZI wa wanachama, SI data ya
-     * uzalishaji ya shamba lingine - ndiyo tofauti ya makusudi kati ya
-     * requireSameFarm na requireResourceInCallersFarm (na D-1). Kwa asiye
-     * ROOT kichwa hiki hakina athari yoyote.
+     * MWANACHAMA WA MASHAMBA MENGI naye anachagua - lakini kati ya mashamba
+     * YAKE tu. Principal wa kila uanachama umeshajengwa kwenye cache
+     * (loadAccountFromDatabase), hivyo kuchagua ni kuchukua mmoja wao: farmId,
+     * role NA ruhusa zote zinatoka kwenye uanachama wa shamba hilo. Kabla ya
+     * hili mtu huyu alibaki kwenye shamba lenye farmId ndogo milele, na
+     * uanachama wake mwingine haukuwa na kazi yoyote.
+     *
+     * Mwenye 'manage_farms' asiye ROOT BADO haruhusiwi kuchagua shamba
+     * asilo mwanachama wake: ruhusa ya kampuni inafungua USIMAMIZI wa
+     * wanachama, SI data ya uzalishaji ya shamba lingine - ndiyo tofauti ya
+     * makusudi kati ya requireSameFarm na requireResourceInCallersFarm (na
+     * D-1). Shamba lisilo lake linapuuzwa kama shamba lisilopo.
      *
      * Shamba lisilopo (au lililofutwa) linapuuzwa badala ya kukataliwa: jibu
      * linabaki lilelile ambalo ROOT asiyechagua chochote hupata
@@ -237,12 +252,18 @@ public class JwtAuthFilter extends OncePerRequestFilter {
      */
     private Account withSelectedFarm(Account account, HttpServletRequest request) {
         AuthenticatedUser principal = account.principal();
-        if (!principal.isRoot()) {
+        Integer farmId = parseFarmHeader(request.getHeader(FARM_HEADER));
+        if (farmId == null) {
             return account;
         }
 
-        Integer farmId = parseFarmHeader(request.getHeader(FARM_HEADER));
-        if (farmId == null || !farmRepository.existsByFarmId(farmId)) {
+        if (!principal.isRoot()) {
+            AuthenticatedUser member = account.byFarm().get(farmId);
+            return member == null ? account
+                    : new Account(member, account.status(), account.mustChangePassword(), account.byFarm());
+        }
+
+        if (!farmRepository.existsByFarmId(farmId)) {
             return account;
         }
 
@@ -333,8 +354,6 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             return new Account(noAccess, status, mustChange);
         }
 
-        // TODO: farm switching - kwa sasa uanachama wa kwanza pekee
-        // (umepangwa kwa farmId ili uwe thabiti).
         List<FarmUser> memberships = farmUserRepository.findByUser_UserIdOrderByFarm_FarmIdAsc(userId);
         if (memberships.isEmpty()) {
             // Mtu ameidhinishwa lakini hajapangiwa shamba - anaingia, lakini
@@ -342,20 +361,36 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             return new Account(noAccess, status, mustChange);
         }
 
-        FarmUser membership = memberships.get(0);
+        // Principal wa KILA uanachama, ili kuchagua shamba (withSelectedFarm)
+        // kusihitaji kusoma DB kwenye kila ombi. Chaguo-msingi - ombi lisilo na
+        // X-Farm-Id - ni shamba lenye farmId ndogo, kama ilivyokuwa: thabiti,
+        // si nasibu, na linalingana na farmId iliyo kwenye token ya login.
+        Map<Integer, AuthenticatedUser> byFarm = new LinkedHashMap<>();
+        for (FarmUser membership : memberships) {
+            if (membership.getFarm() != null) {
+                byFarm.put(membership.getFarm().getFarmId(), principalFor(userId, membership));
+            }
+        }
+        if (byFarm.isEmpty()) {
+            return new Account(noAccess, status, mustChange);
+        }
+
+        return new Account(byFarm.values().iterator().next(), status, mustChange,
+                Collections.unmodifiableMap(byFarm));
+    }
+
+    private AuthenticatedUser principalFor(UUID userId, FarmUser membership) {
         Role role = membership.getRole();
         List<String> permissionCodes = (role == null || role.getPermissions() == null) ? List.of()
                 : role.getPermissions().stream().map(Permission::getCode).toList();
 
-        AuthenticatedUser principal = new AuthenticatedUser(
+        return new AuthenticatedUser(
                 userId,
-                membership.getFarm() == null ? null : membership.getFarm().getFarmId(),
+                membership.getFarm().getFarmId(),
                 role == null ? null : role.getRoleId(),
                 role == null ? null : role.getName(),
                 permissionCodes,
                 false);
-
-        return new Account(principal, status, mustChange);
     }
 
     /**

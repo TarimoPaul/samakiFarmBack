@@ -6,7 +6,10 @@ package com.samaki.farm.cycle.dto;
  * `stockingAgeMonths` ni HIARI (null = 0, yaani wadogo kabisa), hivyo
  * mteja wa zamani asiyeituma anaendelea kufanya kazi bila mabadiliko na
  * kupata hesabu ile ile aliyokuwa akipata.
+ *
+ * `fingerlingCost` ni HIARI pia (V25), kwa sababu ile ile: null =
+ * haikurekodiwa. Ikitolewa, lazima iwe > 0.
  */
 public record CreateCycleInput(Integer unitId, Integer speciesId, String stockingDate,
                                 Integer fingerlingsCount, Double survivalRateEstimate,
-                                Integer stockingAgeMonths) {}
+                                Integer stockingAgeMonths, Double fingerlingCost) {}

@@ -8,6 +8,9 @@ import com.samaki.farm.cycle.entity.Cycle;
 import com.samaki.farm.cycle.repository.CycleRepository;
 import com.samaki.farm.dailytask.entity.DailyTask;
 import com.samaki.farm.dailytask.repository.DailyTaskRepository;
+import com.samaki.farm.harvest.entity.HarvestEvent;
+import com.samaki.farm.harvest.repository.HarvestEventRepository;
+import com.samaki.farm.harvest.services.HarvestTotals;
 import com.samaki.farm.productionunit.entity.ProductionUnit;
 import com.samaki.farm.productionunit.repository.ProductionUnitRepository;
 import com.samaki.farm.species.entity.Species;
@@ -35,15 +38,18 @@ public class CycleService {
     private final ProductionUnitRepository unitRepository;
     private final SpeciesRepository speciesRepository;
     private final DailyTaskRepository dailyTaskRepository;
+    private final HarvestEventRepository harvestEventRepository;
     private final PermissionChecker permissionChecker;
 
     public CycleService(CycleRepository cycleRepository, ProductionUnitRepository unitRepository,
                          SpeciesRepository speciesRepository, DailyTaskRepository dailyTaskRepository,
+                         HarvestEventRepository harvestEventRepository,
                          PermissionChecker permissionChecker) {
         this.cycleRepository = cycleRepository;
         this.unitRepository = unitRepository;
         this.speciesRepository = speciesRepository;
         this.dailyTaskRepository = dailyTaskRepository;
+        this.harvestEventRepository = harvestEventRepository;
         this.permissionChecker = permissionChecker;
     }
 
@@ -52,6 +58,10 @@ public class CycleService {
      * na kwenye V1__init_schema.sql.
      */
     private static final Set<String> STATUSES = Set.of(Cycle.ACTIVE, Cycle.HARVESTED, Cycle.FAILED);
+
+    /** `cycles.fingerling_cost` ni NUMERIC(14,2) (V25) - kama `costs.amount`. */
+    private static final int MONEY_SCALE = 2;
+    private static final BigDecimal MONEY_MAX = new BigDecimal("999999999999.99");
 
     @Transactional(readOnly = true)
     public List<Cycle> listForCurrentFarm(String status) {
@@ -110,6 +120,7 @@ public class CycleService {
         cycle.setStockingDate(stockingDate);
         cycle.setFingerlingsCount(input.fingerlingsCount());
         cycle.setStockingAgeMonths(stockingAgeMonths);
+        cycle.setFingerlingCost(optionalFingerlingCost(input.fingerlingCost()));
         if (input.survivalRateEstimate() != null) {
             cycle.setSurvivalRateEstimate(BigDecimal.valueOf(input.survivalRateEstimate()));
         }
@@ -191,6 +202,38 @@ public class CycleService {
     }
 
     /**
+     * Gharama ya vifaranga - HIARI, na ikitolewa LAZIMA iwe > 0.
+     *
+     * Hiari kwa hoja ile ile ya stockingAgeMonths: mteja wa zamani
+     * asiyeituma anaendelea kufanya kazi, na null inamaanisha
+     * "haikurekodiwa" - si "vifaranga vilikuwa bure". Sifuri inakataliwa
+     * kwa sababu hiyo hiyo: ingesomeka kama bei halisi.
+     *
+     * Ukaguzi mara mbili, kama CostService.requireAmount: 0.004 ni chanya
+     * lakini NUMERIC(14,2) inaigeuza 0.00, ambayo CHECK ya V25 ingeikataa
+     * kwa ujumbe usiotaja uga.
+     */
+    private static BigDecimal optionalFingerlingCost(Double raw) {
+        if (raw == null) {
+            return null;
+        }
+        if (raw.isNaN() || raw.isInfinite() || raw <= 0) {
+            throw new IllegalArgumentException(
+                    "Gharama ya vifaranga lazima iwe zaidi ya sifuri (au iachwe wazi).");
+        }
+        BigDecimal cost = BigDecimal.valueOf(raw).setScale(MONEY_SCALE, RoundingMode.HALF_UP);
+        if (cost.signum() <= 0) {
+            throw new IllegalArgumentException(
+                    "Gharama ya vifaranga ni ndogo mno - haiwezi kuwa chini ya 0.01.");
+        }
+        if (cost.compareTo(MONEY_MAX) > 0) {
+            throw new IllegalArgumentException(
+                    "Gharama ya vifaranga haiwezi kuzidi " + MONEY_MAX.toPlainString() + ".");
+        }
+        return cost;
+    }
+
+    /**
      * FR-3.2 - stockingDate + MIEZI ILIYOBAKI (angalia monthsToGrow).
      *
      * growth_months_avg ni NUMERIC(4,1), yaani nusu-mwezi ni thamani
@@ -247,31 +290,50 @@ public class CycleService {
      * `edit_cycle`, ILE ILE inayoruhusu kuweka - HAKUNA ruhusa mpya.
      * Anayeweza kuanzisha mzunguko ndiye anayeweza kuufunga; kuigawa
      * kungemaanisha shamba lenye mtu wa kuanzisha bila mtu wa kumaliza.
+     * (Matukio ya kila siku yana ruhusa yao - `record_harvest`, V26.)
+     *
+     * =================================================================
+     * JUMLA ZINATOKA KWENYE MATUKIO, SI KWA MWOMBAJI (V25)
+     *
+     * Mavuno ni matukio mengi ya kila siku (HarvestEvent), si namba moja
+     * ya siku ya kufunga. Hivyo closeCycle HAIPOKEI idadi wala uzito
+     * tena - inajumlisha matukio yaliyopo (angalia HarvestTotals):
+     * harvestedCount = SOLD + REMOVED, mortalityCount = DIED,
+     * totalWeightKg = uzito wa SOLD + REMOVED, totalRevenue = mauzo.
+     *
+     * KUFUNGA NI KWA MWISHO: baada ya hapa matukio hayarekodiwi wala
+     * kufutwa (CYCLE_ALREADY_CLOSED), hivyo jumla hizi hazibadiliki kamwe.
+     * Kufuli ya mstari (findForUpdateByCycleId) inahakikisha hakuna tukio
+     * linaloingia kati ya kujumlisha na kufunga.
+     * =================================================================
      *
      * KIWANGO CHA KUISHI HAKIPOKELEWI HAPA. Ni mgawanyo wa
      * harvestedCount kwa fingerlingsCount, unaokokotolewa na DATABASE
-     * (angalia Cycle.actualSurvivalRate na V19) - hivyo hakuna namba ya
-     * mwombaji inayoweza kupingana na hesabu. survivalRateEstimate ya siku
-     * ya kuweka HAIGUSWI: makisio na matokeo ni vitu viwili, na
-     * kulinganisha ndiyo maana ya kuvihifadhi vyote.
+     * (angalia Cycle.actualSurvivalRate na V19) - na harvestedCount
+     * yenyewe ni jumla ya server. survivalRateEstimate ya siku ya kuweka
+     * HAIGUSWI: makisio na matokeo ni vitu viwili, na kulinganisha ndiyo
+     * maana ya kuvihifadhi vyote.
      */
     @Transactional
-    public Cycle closeCycle(Integer cycleId, String outcome, String actualHarvestDate,
-                             Integer harvestedCount, Double totalWeightKg, String notes) {
+    public Cycle closeCycle(Integer cycleId, String outcome, String actualHarvestDate, String notes) {
         permissionChecker.requireFarmScope("edit_cycle");
 
         Cycle cycle = requireCycleInCallersFarm(cycleId);
         String closingStatus = requireClosingOutcome(outcome);
         requireStillOpen(cycle);
 
-        LocalDate harvestDate = requireHarvestDate(actualHarvestDate, cycle);
-        int count = requireHarvestCount(harvestedCount, closingStatus);
-        BigDecimal weight = requireHarvestWeight(totalWeightKg, closingStatus);
+        List<HarvestEvent> events = harvestEventRepository
+                .findByCycle_CycleIdOrderByEventDateDescHarvestEventIdDesc(cycle.getCycleId());
+        LocalDate harvestDate = requireHarvestDate(actualHarvestDate, cycle, events);
+        HarvestTotals totals = HarvestTotals.of(events);
+        requireFishHarvested(totals, closingStatus);
 
         cycle.setStatus(closingStatus);
         cycle.setActualHarvestDate(harvestDate);
-        cycle.setHarvestedCount(count);
-        cycle.setTotalWeightKg(weight);
+        cycle.setHarvestedCount(totals.harvestedCount());
+        cycle.setTotalWeightKg(totals.totalWeightKg());
+        cycle.setMortalityCount(totals.mortalityCount());
+        cycle.setTotalRevenue(totals.totalRevenue());
         cycle.setHarvestNotes(notes == null || notes.isBlank() ? null : notes.trim());
 
         // saveAndFlush, si save: `actual_survival_rate` inakokotolewa na
@@ -287,21 +349,19 @@ public class CycleService {
     }
 
     /**
-     * Mzunguko wa shamba la mwombaji, au VALIDATION_ERROR.
+     * Mzunguko wa shamba la mwombaji - UKIFUNGWA (FOR UPDATE) - au
+     * VALIDATION_ERROR.
      *
-     * findById HAITUMII @SQLRestriction (angalia BaseEntity), hivyo
-     * ukaguzi wa isDeleted ni wa lazima hapa - vinginevyo mzunguko
-     * uliofutwa ungeweza kufungwa.
+     * Derived query (si findById), hivyo @SQLRestriction inachuja
+     * uliofutwa - mzunguko uliofutwa hauwezi kufungwa. Kufuli: angalia
+     * CycleRepository.findForUpdateByCycleId.
      */
     private Cycle requireCycleInCallersFarm(Integer cycleId) {
         if (cycleId == null) {
             throw new IllegalArgumentException("Kitambulisho cha mzunguko kinahitajika.");
         }
-        Cycle cycle = cycleRepository.findById(cycleId)
+        Cycle cycle = cycleRepository.findForUpdateByCycleId(cycleId)
                 .orElseThrow(() -> new IllegalArgumentException("Mzunguko haujulikani"));
-        if (cycle.isDeleted()) {
-            throw new IllegalArgumentException("Mzunguko haujulikani");
-        }
         permissionChecker.requireResourceInCallersFarm(cycle.getUnit().getFarm().getFarmId());
         return cycle;
     }
@@ -328,10 +388,9 @@ public class CycleService {
      *
      * Si ukamilifu wa kinadharia - ni ulinzi wa NAMBA, kama
      * PURCHASE_ALREADY_REVERSED. Ombi la pili (kubofya mara mbili, au
-     * skrini isiyopata jibu la kwanza) lingeandika mavuno MENGINE juu ya
-     * yaliyokwisha rekodiwa: idadi ingebadilika, na
-     * `actual_survival_rate` - inayokokotolewa kutoka kwake -
-     * ingebadilika nayo, kimyakimya. Mavuno yanatokea MARA MOJA.
+     * skrini isiyopata jibu la kwanza) lingeandika jumla MPYA juu ya
+     * zilizokwisha rekodiwa, pamoja na tarehe na maelezo mapya, na
+     * `actual_survival_rate` ingefuata. Kufunga kunatokea MARA MOJA.
      */
     private static void requireStillOpen(Cycle cycle) {
         if (!Cycle.ACTIVE.equals(cycle.getStatus())) {
@@ -343,14 +402,19 @@ public class CycleService {
     }
 
     /**
-     * Tarehe ya mavuno: inasomeka, na SI KABLA ya kuweka.
+     * Tarehe ya kufunga: inasomeka, SI KABLA ya kuweka, na SI KABLA ya
+     * tukio la mwisho la mavuno.
      *
      * Tarehe ya kuvuna iliyotangulia tarehe ya kuweka ingefanya mzunguko
      * uwe na muda hasi - namba ambayo kila ripoti ya urefu wa mzunguko
      * ingeibeba bila kuiona. Ni kosa la kawaida la kalenda ya mteja, si
      * hali adimu.
+     *
+     * Na mzunguko uliofungwa tarehe 10 wenye mauzo ya tarehe 15 ni hadithi
+     * isiyowezekana: samaki waliuzwa kutoka bwawa lililokwisha vunwa.
+     * `events` zimepangwa mpya kwanza, hivyo ya kwanza ndiyo ya mwisho.
      */
-    private static LocalDate requireHarvestDate(String raw, Cycle cycle) {
+    private static LocalDate requireHarvestDate(String raw, Cycle cycle, List<HarvestEvent> events) {
         if (raw == null || raw.isBlank()) {
             throw new IllegalArgumentException("Tarehe ya mavuno inahitajika.");
         }
@@ -364,44 +428,38 @@ public class CycleService {
             throw new IllegalArgumentException("Tarehe ya mavuno (" + harvestDate
                     + ") haiwezi kuwa kabla ya tarehe ya kuweka (" + cycle.getStockingDate() + ").");
         }
+        if (!events.isEmpty() && harvestDate.isBefore(events.get(0).getEventDate())) {
+            throw new IllegalArgumentException("Tarehe ya kufunga (" + harvestDate
+                    + ") haiwezi kuwa kabla ya tukio la mwisho la mavuno ("
+                    + events.get(0).getEventDate() + ").");
+        }
         return harvestDate;
     }
 
     /**
-     * Idadi iliyovunwa. SIFURI INARUHUSIWA kwa FAILED pekee.
+     * HARVESTED inahitaji samaki WALIOTOKA WAKIWA HAI (SOLD au REMOVED).
      *
-     * Mzunguko wa HARVESTED wenye samaki sifuri si mavuno - ni hasara,
-     * na ina hali yake (FAILED). Kuruhusu hizo mbili kumaanisha kitu
-     * kimoja kungefanya ripoti ya "mizunguko iliyofanikiwa" isihesabike.
+     * Mzunguko wa HARVESTED bila samaki hai hata mmoja si mavuno - ni
+     * hasara, na ina hali yake (FAILED). Kuruhusu hizo mbili kumaanisha
+     * kitu kimoja kungefanya ripoti ya "mizunguko iliyofanikiwa"
+     * isihesabike. Vifo (DIED) peke yake havitoshi, kwa sababu ile ile.
      *
-     * Kinyume chake HAKIKATALIWI: FAILED yenye idadi ZAIDI ya sifuri ni
-     * halali kabisa - samaki wengi wamekufa, waliobaki wamevunwa. Ndiyo
-     * hali halisi ya shambani, na kuilazimisha kuwa sifuri kungepoteza
-     * kilo zilizookolewa.
+     * Kinyume chake HAKIKATALIWI: FAILED yenye mauzo ni halali kabisa -
+     * samaki wengi wamekufa, waliobaki wameuzwa. Ndiyo hali halisi ya
+     * shambani, na kuikataa kungepoteza kilo zilizookolewa. FAILED bila
+     * tukio lolote pia ni halali: kuishi 0.0, jibu halisi.
+     *
+     * (Sheria ya zamani ya "uzito > 0 kwa HARVESTED" imeondoka: SOLD
+     * inalazimisha uzito kwenye tukio lenyewe, na REMOVED ina uzito wa
+     * hiari - samaki hai waliotolewa bila kupimwa bado ni samaki hai.)
      */
-    private static int requireHarvestCount(Integer harvestedCount, String closingStatus) {
-        if (harvestedCount == null || harvestedCount < 0) {
+    private static void requireFishHarvested(HarvestTotals totals, String closingStatus) {
+        if (Cycle.HARVESTED.equals(closingStatus) && totals.harvestedCount() == 0) {
             throw new IllegalArgumentException(
-                    "Idadi ya samaki waliovunwa haiwezi kuwa pungufu ya sifuri.");
+                    "Hakuna samaki waliouzwa wala kutolewa wakiwa hai kwenye mzunguko huu - "
+                            + "rekodi matukio ya mavuno kwanza, au tumia matokeo '"
+                            + Cycle.FAILED + "'.");
         }
-        if (Cycle.HARVESTED.equals(closingStatus) && harvestedCount == 0) {
-            throw new IllegalArgumentException(
-                    "Mavuno ya samaki sifuri si mavuno. Tumia matokeo '" + Cycle.FAILED + "'.");
-        }
-        return harvestedCount;
-    }
-
-    /** Uzito: sheria ile ile ya idadi, kwa sababu ile ile. */
-    private static BigDecimal requireHarvestWeight(Double totalWeightKg, String closingStatus) {
-        if (totalWeightKg == null || totalWeightKg < 0) {
-            throw new IllegalArgumentException(
-                    "Uzito wa mavuno (kg) hauwezi kuwa pungufu ya sifuri.");
-        }
-        if (Cycle.HARVESTED.equals(closingStatus) && totalWeightKg == 0) {
-            throw new IllegalArgumentException(
-                    "Mavuno ya kilo sifuri si mavuno. Tumia matokeo '" + Cycle.FAILED + "'.");
-        }
-        return BigDecimal.valueOf(totalWeightKg);
     }
 
     /**

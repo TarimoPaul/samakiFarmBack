@@ -4,6 +4,9 @@ import com.samaki.farm.auth.security.AuthenticatedUser;
 import com.samaki.farm.auth.security.JwtAuthFilter;
 import com.samaki.farm.auth.security.PermissionChecker;
 import com.samaki.farm.common.exception.ConflictException;
+import com.samaki.farm.common.exception.ErrorCodes;
+import com.samaki.farm.common.exception.ForbiddenException;
+import com.samaki.farm.common.exception.UnauthorizedException;
 import com.samaki.farm.farmuser.entity.FarmUser;
 import com.samaki.farm.farmuser.repository.FarmUserRepository;
 import com.samaki.farm.user.dto.CreateUserRequest;
@@ -82,6 +85,48 @@ public class UserService {
         user.setEmail(requireAvailableEmail(req.email(), userId));
 
         return toSummary(userRepository.save(user), null);
+    }
+
+    /**
+     * Mtu anarekebisha utambulisho WAKE mwenyewe: jina, simu, barua pepe.
+     *
+     * Sheria zile zile za updateUser (namba/barua pepe zisizochukuliwa, hata na
+     * waliofutwa), lakini BILA manage_users: kila mtu aliyeingia anaweza
+     * kujirekebisha, na hawezi kumgusa mtu mwingine - userId inatoka kwenye
+     * token (AuthController), si kwa mteja.
+     *
+     * VIZUIZI VIWILI ambavyo updateUser haina:
+     *
+     *  - LANGO LA must_change_password. JwtAuthFilter inaacha /api/auth/**
+     *    wazi ili /change-password ifikike, na njia hii iko chini ya prefix
+     *    hiyo - hivyo lango lingerukwa kimya kimya bila ukaguzi huu hapa.
+     *
+     *  - NAMBA YA ROOT HAIBADILISHWI. RbacSeedService inamtafuta ROOT kwa
+     *    ROOT_PHONE kila app inapoanza; namba ikibadilishwa hapa, restart
+     *    inayofuata isingempata na ingetengeneza ROOT WA PILI. Jina na barua
+     *    pepe haviathiri seed, hivyo vinaruhusiwa.
+     */
+    @Transactional
+    public void updateOwnProfile(UUID userId, UpdateUserRequest req) {
+        User user = userRepository.findByUserId(userId)
+                .orElseThrow(() -> new UnauthorizedException(
+                        "Akaunti haipatikani.", ErrorCodes.UNAUTHENTICATED));
+
+        if (user.isMustChangePassword()) {
+            throw new ForbiddenException("Lazima ubadilishe password kabla ya kuendelea kutumia mfumo.",
+                    ErrorCodes.MUST_CHANGE_PASSWORD);
+        }
+
+        String requestedPhone = req.phone() == null ? "" : req.phone().trim();
+        if (Boolean.TRUE.equals(user.getIsRoot()) && !requestedPhone.equals(user.getPhone())) {
+            throw new IllegalArgumentException(
+                    "Namba ya simu ya ROOT haibadilishwi hapa - inatoka kwenye ROOT_PHONE.");
+        }
+
+        user.setName(req.name().trim());
+        user.setPhone(requireAvailablePhone(req.phone(), userId));
+        user.setEmail(requireAvailableEmail(req.email(), userId));
+        userRepository.save(user);
     }
 
     /**
@@ -205,6 +250,28 @@ public class UserService {
         return farmUserRepository.findByFarm_FarmIdOrderByUser_NameAsc(farmId).stream()
                 .map(m -> toSummary(m.getUser(), m))
                 .toList();
+    }
+
+    /**
+     * Mtu ALIYEPO, kwa namba yake ya simu - njia ya kumweka kwenye shamba
+     * jingine bila kumtengenezea akaunti ya pili.
+     *
+     * Bila hii, skrini ya Members ilikuwa na njia moja tu ya "kuongeza mtu":
+     * kuunda akaunti mpya. Kwa mtu aliyepo tayari hilo lingekataliwa kama
+     * namba iliyosajiliwa, na msimamizi asingekuwa na la kufanya.
+     *
+     * farmId/role ni null kwenye jibu kwa makusudi: skrini inauliza "mtu huyu
+     * ni nani", si "yuko wapi" - hiyo ni listMemberships, yenye sheria yake ya
+     * ngazi mbili. ROOT harudishwi: hapewi uanachama (FarmUserService).
+     */
+    @Transactional(readOnly = true)
+    public UserSummary lookupByPhone(String phone) {
+        String trimmed = phone == null ? "" : phone.trim();
+        return userRepository.findByPhone(trimmed)
+                .filter(user -> !Boolean.TRUE.equals(user.getIsRoot()))
+                .map(user -> toSummary(user, null))
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Hakuna mtumiaji mwenye namba hii ya simu."));
     }
 
     private User requireManageableUser(UUID userId) {

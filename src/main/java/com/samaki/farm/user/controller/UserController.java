@@ -1,6 +1,7 @@
 package com.samaki.farm.user.controller;
 
 import com.samaki.farm.common.web.ApiResponse;
+import com.samaki.farm.farmuser.dto.MembershipView;
 import com.samaki.farm.farmuser.services.FarmUserService;
 import com.samaki.farm.user.dto.AssignMembershipRequest;
 import com.samaki.farm.user.dto.CreateUserRequest;
@@ -59,6 +60,13 @@ public class UserController {
         return ApiResponse.ok(userService.listByFarm(farmId));
     }
 
+    /** Mtu aliyepo kwa simu - angalia UserService.lookupByPhone. */
+    @GetMapping("/lookup")
+    @PreAuthorize("hasAuthority('manage_users')")
+    public ApiResponse<UserSummary> lookupByPhone(@RequestParam String phone) {
+        return ApiResponse.ok(userService.lookupByPhone(phone));
+    }
+
     // ---------- Idhini (B4) ----------
 
     @GetMapping("/pending")
@@ -87,6 +95,13 @@ public class UserController {
     }
 
     // ---------- Uanachama (B4) ----------
+
+    /** Mashamba ya mtu - ngazi mbili, angalia FarmUserService.listMemberships. */
+    @GetMapping("/{userId}/memberships")
+    @PreAuthorize("hasAuthority('manage_users')")
+    public ApiResponse<List<MembershipView>> listMemberships(@PathVariable UUID userId) {
+        return ApiResponse.ok(farmUserService.listMemberships(userId));
+    }
 
     @PostMapping("/{userId}/memberships")
     @PreAuthorize("hasAuthority('manage_users')")

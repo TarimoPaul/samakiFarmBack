@@ -208,6 +208,142 @@ class AuthRegressionTest extends IntegrationTest {
     }
 
     @Nested
+    @DisplayName("PUT /api/auth/me - mtu anajirekebisha mwenyewe")
+    class UpdateMe {
+
+        /**
+         * Mfanyakazi HANA manage_users - hiyo ndiyo sababu ya endpoint hii
+         * kuwepo: PUT /api/users/{id} ingemkataa.
+         */
+        @Test
+        @DisplayName("mtu yeyote aliyeingia anabadilisha jina, simu na barua pepe yake")
+        void anyoneUpdatesTheirOwnDetails() {
+            ResponseEntity<String> response = put("/api/auth/me",
+                    "{\"name\":\"Mfanyakazi Mpya\",\"phone\":\"0700100099\",\"email\":\"mpya@samaki.test\"}",
+                    workerToken);
+            JsonNode data = parse(response).path("data");
+
+            assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+            assertThat(data.path("name").asText()).isEqualTo("Mfanyakazi Mpya");
+            assertThat(data.path("phone").asText()).isEqualTo("0700100099");
+            assertThat(data.path("email").asText()).isEqualTo("mpya@samaki.test");
+            // Jibu ni /me kamili - mteja analihifadhi kama mtumiaji wa sasa.
+            assertThat(permissionList(data)).contains("view_dashboard");
+
+            // /me inayofuata inasoma kilichohifadhiwa, na namba mpya ndiyo ya kuingia.
+            assertThat(parse(get("/api/auth/me", workerToken)).path("data").path("name").asText())
+                    .isEqualTo("Mfanyakazi Mpya");
+            assertThat(login("0700100099")).isNotBlank();
+        }
+
+        @Test
+        @DisplayName("inamgusa ANAYEITA pekee - userId inatoka kwenye token")
+        void touchesOnlyTheCaller() {
+            put("/api/auth/me", "{\"name\":\"Jina Jipya\",\"phone\":\"" + WORKER_PHONE + "\"}", workerToken);
+
+            JsonNode admin = parse(get("/api/auth/me", adminToken)).path("data");
+            assertThat(admin.path("phone").asText()).isEqualTo(ADMIN_PHONE);
+            assertThat(admin.path("name").asText()).isNotEqualTo("Jina Jipya");
+        }
+
+        @Test
+        @DisplayName("barua pepe tupu inaifuta (null), si \"\"")
+        void emptyEmailClearsIt() {
+            put("/api/auth/me",
+                    "{\"name\":\"Mfanyakazi\",\"phone\":\"" + WORKER_PHONE + "\",\"email\":\"a@samaki.test\"}",
+                    workerToken);
+
+            JsonNode data = parse(put("/api/auth/me",
+                    "{\"name\":\"Mfanyakazi\",\"phone\":\"" + WORKER_PHONE + "\",\"email\":\"\"}",
+                    workerToken)).path("data");
+
+            assertThat(data.path("email").isNull()).isTrue();
+        }
+
+        @Test
+        @DisplayName("namba ya mtu mwingine ni 409 CONFLICT, na hakuna kilichobadilika")
+        void takenPhoneIsAConflict() {
+            ResponseEntity<String> response = put("/api/auth/me",
+                    "{\"name\":\"Mfanyakazi\",\"phone\":\"" + ADMIN_PHONE + "\"}", workerToken);
+
+            assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+            assertThat(parse(response).path("errorCode").asText()).isEqualTo("CONFLICT");
+            assertThat(parse(get("/api/auth/me", workerToken)).path("data").path("phone").asText())
+                    .isEqualTo(WORKER_PHONE);
+        }
+
+        @Test
+        @DisplayName("jina tupu ni 400 VALIDATION_ERROR")
+        void blankNameIsRejected() {
+            ResponseEntity<String> response = put("/api/auth/me",
+                    "{\"name\":\"  \",\"phone\":\"" + WORKER_PHONE + "\"}", workerToken);
+
+            assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+            assertThat(parse(response).path("errorCode").asText()).isEqualTo("VALIDATION_ERROR");
+        }
+
+        @Test
+        @DisplayName("bila token ni 401 UNAUTHENTICATED")
+        void requiresASession() {
+            ResponseEntity<String> response = put("/api/auth/me",
+                    "{\"name\":\"X\",\"phone\":\"0700100098\"}", null);
+
+            assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+            assertThat(parse(response).path("errorCode").asText()).isEqualTo("UNAUTHENTICATED");
+        }
+
+        /**
+         * Njia hii iko chini ya /api/auth/**, ambayo JwtAuthFilter inaiacha
+         * nje ya lango ili /change-password ifikike. Bila ukaguzi wa
+         * UserService.updateOwnProfile, lango lingerukwa hapa kimya kimya.
+         */
+        @Test
+        @DisplayName("lango la must_change_password LINAIZUIA, ingawa iko chini ya /api/auth")
+        void gatedUserCannotEditDetails() {
+            inTx(() -> {
+                User user = userRepository.findByPhone(WORKER_PHONE).orElseThrow();
+                user.setMustChangePassword(true);
+                return userRepository.save(user);
+            });
+            com.samaki.farm.auth.security.JwtAuthFilter.clearAllUserCache();
+
+            ResponseEntity<String> response = put("/api/auth/me",
+                    "{\"name\":\"Nimeruka Lango\",\"phone\":\"" + WORKER_PHONE + "\"}", workerToken);
+
+            assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+            assertThat(parse(response).path("errorCode").asText()).isEqualTo("MUST_CHANGE_PASSWORD");
+            assertThat(userRepository.findByPhone(WORKER_PHONE).orElseThrow().getName())
+                    .isNotEqualTo("Nimeruka Lango");
+        }
+
+        /**
+         * RbacSeedService inamtafuta ROOT kwa ROOT_PHONE kila app inapoanza.
+         * Namba ikibadilishwa, restart ingetengeneza ROOT wa pili.
+         */
+        @Test
+        @DisplayName("ROOT hawezi kubadilisha namba yake, lakini anaweza kubadilisha jina")
+        void rootPhoneIsPinned() {
+            inTx(() -> {
+                User user = userRepository.findByPhone(VIEWER_PHONE).orElseThrow();
+                user.setIsRoot(true);
+                return userRepository.save(user);
+            });
+            com.samaki.farm.auth.security.JwtAuthFilter.clearAllUserCache();
+            String rootToken = login(VIEWER_PHONE);
+
+            ResponseEntity<String> phoneChange = put("/api/auth/me",
+                    "{\"name\":\"Root\",\"phone\":\"0700100097\"}", rootToken);
+            assertThat(phoneChange.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+            assertThat(parse(phoneChange).path("errorCode").asText()).isEqualTo("VALIDATION_ERROR");
+
+            ResponseEntity<String> rename = put("/api/auth/me",
+                    "{\"name\":\"Msimamizi Mkuu\",\"phone\":\"" + VIEWER_PHONE + "\"}", rootToken);
+            assertThat(rename.getStatusCode()).isEqualTo(HttpStatus.OK);
+            assertThat(parse(rename).path("data").path("name").asText()).isEqualTo("Msimamizi Mkuu");
+        }
+    }
+
+    @Nested
     @DisplayName("RBAC inayohaririwa wakati wa run (D-13)")
     class RuntimeEditableRbac {
 

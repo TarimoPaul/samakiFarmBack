@@ -662,9 +662,17 @@ class DailyTaskCompletionRegressionTest extends IntegrationTest {
             assertThat(farmDailyTasks(workerToken, null).path("data").path("farmDailyTasks"))
                     .hasSize(6);
 
+            // Mavuno ni matukio (V25): kwanza mauzo, kisha kufunga -
+            // closeCycle haipokei idadi tena.
+            String today = LocalDate.now(EAT).toString();
+            JsonNode sold = graphql(adminToken, "mutation { recordHarvestEvent(cycleId: " + second
+                    + ", eventDate: \"" + today + "\", fishCount: 120, weightKg: 45.5"
+                    + ", reason: \"SOLD\", saleAmount: 450000) { harvestEventId } }");
+            assertThat(graphqlErrorCode(sold)).isNull();
+
             JsonNode closed = graphql(adminToken, "mutation { closeCycle(cycleId: " + second
-                    + ", outcome: \"HARVESTED\", actualHarvestDate: \"" + LocalDate.now()
-                    + "\", harvestedCount: 120, totalWeightKg: 45.5) { cycleId status } }");
+                    + ", outcome: \"HARVESTED\", actualHarvestDate: \"" + today
+                    + "\") { cycleId status } }");
             assertThat(graphqlErrorCode(closed)).isNull();
 
             JsonNode listed = farmDailyTasks(workerToken, null).path("data").path("farmDailyTasks");

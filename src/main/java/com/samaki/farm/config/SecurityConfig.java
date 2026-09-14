@@ -82,6 +82,8 @@ public class SecurityConfig {
                 // chain likipata 401 UNAUTHENTICATED, badala ya kuingia
                 // ndani ya controller kwanza.
                 .requestMatchers("/api/auth/me").authenticated()
+                // Mashamba ya kiteuzi ni ya mtu ALIYEINGIA, kama /me.
+                .requestMatchers("/api/auth/my-farms").authenticated()
                 .requestMatchers("/api/auth/**").permitAll()
                 // Hakuna sheria ya /actuator/health hapa: actuator HAIPO
                 // kwenye pom.xml, hivyo njia hiyo haijamap-iwa kwa handler

@@ -4,14 +4,11 @@ import com.samaki.farm.asset.entity.Asset;
 import com.samaki.farm.asset.entity.AssetCategory;
 import com.samaki.farm.asset.repository.AssetCategoryRepository;
 import com.samaki.farm.asset.repository.AssetRepository;
-import com.samaki.farm.auth.security.AuthenticatedUser;
 import com.samaki.farm.auth.security.PermissionChecker;
 import com.samaki.farm.common.exception.ConflictException;
 import com.samaki.farm.farm.entity.Farm;
-import com.samaki.farm.farm.repository.FarmRepository;
-import com.samaki.farm.farmuser.repository.FarmUserRepository;
+import com.samaki.farm.farm.services.FarmMembershipService;
 import com.samaki.farm.reminder.config.ReminderProperties;
-import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -19,9 +16,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
-import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Set;
 
 /**
  * DAFTARI LA MALI - kila kitu kampuni inachomiliki, na kiko wapi.
@@ -77,21 +72,18 @@ public class AssetService {
 
     private final AssetRepository assetRepository;
     private final AssetCategoryRepository assetCategoryRepository;
-    private final FarmRepository farmRepository;
-    private final FarmUserRepository farmUserRepository;
+    private final FarmMembershipService farmMembership;
     private final PermissionChecker permissionChecker;
     private final ReminderProperties reminderProperties;
 
     public AssetService(AssetRepository assetRepository,
                         AssetCategoryRepository assetCategoryRepository,
-                        FarmRepository farmRepository,
-                        FarmUserRepository farmUserRepository,
+                        FarmMembershipService farmMembership,
                         PermissionChecker permissionChecker,
                         ReminderProperties reminderProperties) {
         this.assetRepository = assetRepository;
         this.assetCategoryRepository = assetCategoryRepository;
-        this.farmRepository = farmRepository;
-        this.farmUserRepository = farmUserRepository;
+        this.farmMembership = farmMembership;
         this.permissionChecker = permissionChecker;
         this.reminderProperties = reminderProperties;
     }
@@ -180,7 +172,7 @@ public class AssetService {
 
         Asset asset = new Asset();
         asset.setName(requireName(name));
-        asset.setFarm(requireCallersFarm(farmId));
+        asset.setFarm(farmMembership.requireCallersFarm(farmId));
         asset.setCost(requireCost(cost));
         asset.setAcquiredDate(requireAcquiredDate(acquiredDate));
         asset.setSizeLabel(normaliseSizeLabel(sizeLabel));
@@ -204,68 +196,30 @@ public class AssetService {
      * Kinachobaki ni {@code currentUser()} ndani ya {@link #callersFarmIds()}:
      * asiyeingia (login) anapata 401, si orodha tupu.
      *
-     * IPO HAPA, si kwenye FarmService, kwa sababu MOJA: uanachama
-     * unaokokotolewa ni ule ule wa {@link #callersFarmIds()} - vyanzo
-     * viwili (`farm_users` na `farms.owner_user_id`) vyenye join ya wazi
-     * inayoheshimu @SQLRestriction. Nakala ya pili ya swali hilo ndani ya
-     * FarmService ingekuwa nafasi ya pili ya kuvujisha shamba
-     * lililofutwa. Linganisha na FarmService.listAll, ambayo ni ya
-     * `manage_farms` na inarudisha mashamba YOTE ya kampuni - swali
-     * TOFAUTI, si hili.
+     * Kazi yenyewe iko {@link FarmMembershipService#callersFarms()} -
+     * uanachama ni swali la mashamba, si la mali, na tangu module ya
+     * gharama (V23/V24) ni maswali MATATU yanayolihitaji. Linganisha na
+     * FarmService.listAll, ambayo ni ya `manage_farms` na inarudisha
+     * mashamba YOTE ya kampuni - swali TOFAUTI, si hili.
      */
     @Transactional(readOnly = true)
     public List<Farm> listCallersFarms() {
-        List<Integer> farmIds = callersFarmIds();
-        if (farmIds.isEmpty()) {
-            // `farm_id IN ()` si SQL halali - sababu ile ile ya listAssets.
-            return List.of();
-        }
-        return farmRepository.findByFarmIdInOrderByFarmIdAsc(farmIds);
+        return farmMembership.callersFarms();
     }
 
     /**
      * MASHAMBA YOTE ya mwombaji - uanachama (`farm_users`) PAMOJA na
      * umiliki (`farms.owner_user_id`).
      *
-     * Vyanzo viwili kwa sababu ni dhana mbili tofauti kwenye schema, na
-     * hakuna kikwazo kinachohakikisha kwamba mmiliki ni mwanachama pia
-     * (FarmService.create inaunda shamba lisilo na mmiliki; umiliki
-     * unawekwa baadaye). Kwa vitendo huwa ni watu wale wale, na
-     * LinkedHashSet inaondoa rudufu ikihifadhi mpangilio wa farmId.
-     *
-     * ROOT: hana uanachama wowote (angalia PermissionChecker), hivyo
-     * vyanzo vyote viwili ni tupu. Anachopata ni shamba ALILOLICHAGUA kwa
-     * kichwa X-Farm-Id, likiwa limekwisha thibitishwa na JwtAuthFilter -
-     * hoja ile ile ya D-9 iliyompa muktadha wa shamba mahali pengine:
-     * bila hii, msimamizi mkuu wa mfumo ndiye PEKEE asiyeweza kuona
-     * daftari la mali la shamba lolote.
+     * ILIKUWA HAPA, sasa iko {@link FarmMembershipService}. Ilihamishwa
+     * module ya gharama (V23/V24) ilipohitaji jibu lile lile: nakala ya
+     * pili ya swali hili ingekuwa nafasi ya pili ya kuvujisha shamba
+     * lililofutwa (angalia FarmUserRepository.findFarmIdsByUserId, ambapo
+     * `join fu.farm f` ya wazi ndiyo inayolizuia). Method inabaki hapa
+     * kama jina la ndani ili maelezo ya daftari hili yasitawanyike.
      */
     private List<Integer> callersFarmIds() {
-        AuthenticatedUser user = permissionChecker.currentUser();
-
-        if (user.isRoot()) {
-            return user.getFarmId() == null ? List.of() : List.of(user.getFarmId());
-        }
-
-        Set<Integer> farmIds = new LinkedHashSet<>(
-                farmUserRepository.findFarmIdsByUserId(user.getUserId()));
-        farmRepository.findByOwner_UserId(user.getUserId())
-                .forEach(farm -> farmIds.add(farm.getFarmId()));
-        return List.copyOf(farmIds);
-    }
-
-    private Farm requireCallersFarm(Integer farmId) {
-        if (farmId == null) {
-            throw new IllegalArgumentException("Shamba la mali linahitajika.");
-        }
-        if (!callersFarmIds().contains(farmId)) {
-            throw new AccessDeniedException("Huruhusiwi kufikia shamba hili.");
-        }
-        // findByFarmId (derived), si findById: @SQLRestriction inatumika
-        // hapo pekee (angalia BaseEntity). Kwa vitendo callersFarmIds
-        // tayari imechuja yaliyofutwa, hivyo hii ni ngome ya pili.
-        return farmRepository.findByFarmId(farmId)
-                .orElseThrow(() -> new IllegalArgumentException("Shamba halipo"));
+        return farmMembership.callersFarmIds();
     }
 
     // ==================================================== uthibitisho
