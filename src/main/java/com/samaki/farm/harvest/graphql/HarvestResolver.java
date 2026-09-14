@@ -45,6 +45,16 @@ public class HarvestResolver {
         return harvestService.delete(harvestEventId);
     }
 
+    @MutationMapping
+    public HarvestEvent correctHarvestEvent(@Argument Integer harvestEventId,
+                                            @Argument String eventDate,
+                                            @Argument Integer fishCount,
+                                            @Argument Double weightKg,
+                                            @Argument String reason,
+                                            @Argument Double saleAmount) {
+        return harvestService.correct(harvestEventId, eventDate, fishCount, weightKg, reason, saleAmount);
+    }
+
     @SchemaMapping(typeName = "HarvestEvent", field = "cycleId")
     public Integer cycleId(HarvestEvent event) {
         return event.getCycle().getCycleId();

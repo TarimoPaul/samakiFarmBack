@@ -150,6 +150,53 @@ public class HarvestService {
         return true;
     }
 
+    /**
+     * KUREKEBISHA tukio: kufuta la zamani (soft) na kurekodi jipya, KWENYE
+     * TRANSACTION MOJA - mtindo wa FeedService.correctFeedPurchase.
+     *
+     * Si UPDATE ya safu kwa makusudi: namba hizi zinabeba fedha na kiwango
+     * cha kuishi, na safu ya zamani (is_deleted, deleted_by) inabaki kueleza
+     * nini kilibadilishwa na nani. Ni mutation MOJA kwa sababu ile ile ya
+     * correctFeedPurchase: mteja akiita delete kisha record na ombi la pili
+     * likashindwa, tukio lingepotea bila mbadala.
+     *
+     * Uthibitisho WOTE unafanyika KABLA ya kufuta: tukio jipya likikataliwa,
+     * la zamani linabaki kama lilivyo. Mzunguko ni ule ule wa tukio la zamani
+     * - kurekebisha hakuhamishi tukio kwenye mzunguko mwingine.
+     *
+     * Inarudisha tukio JIPYA (kitambulisho kipya).
+     */
+    @Transactional
+    public HarvestEvent correct(Integer harvestEventId, String eventDate, Integer fishCount,
+                                Double weightKg, String reason, Double saleAmount) {
+        permissionChecker.requireFarmScope(RECORD_PERMISSION);
+
+        if (harvestEventId == null) {
+            throw new IllegalArgumentException("Kitambulisho cha tukio kinahitajika.");
+        }
+
+        // Mzunguko kwanza, tukio baadaye - sababu ile ile ya delete().
+        Integer cycleId = harvestEventRepository.findCycleIdByHarvestEventId(harvestEventId)
+                .orElseThrow(() -> new IllegalArgumentException("Tukio la mavuno halijulikani."));
+        Cycle cycle = requireOpenCycleForUpdate(cycleId);
+
+        HarvestEvent original = harvestEventRepository.findByHarvestEventId(harvestEventId)
+                .orElseThrow(() -> new IllegalArgumentException("Tukio la mavuno halijulikani."));
+
+        Reason parsedReason = requireReason(reason);
+        HarvestEvent replacement = new HarvestEvent();
+        replacement.setCycle(cycle);
+        replacement.setReason(parsedReason);
+        replacement.setEventDate(requireEventDate(eventDate, cycle));
+        replacement.setFishCount(requireFishCount(fishCount));
+        replacement.setWeightKg(requireWeight(weightKg, parsedReason));
+        replacement.setSaleAmount(requireSaleAmount(saleAmount, parsedReason));
+
+        original.softDelete(permissionChecker.currentUser().getUserId());
+        harvestEventRepository.save(original);
+        return harvestEventRepository.save(replacement);
+    }
+
     // ==================================================== uthibitisho
 
     /**

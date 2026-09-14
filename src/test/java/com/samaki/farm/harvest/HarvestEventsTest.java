@@ -400,6 +400,129 @@ class HarvestEventsTest extends IntegrationTest {
         }
     }
 
+    /**
+     * Kurekebisha = kufuta (soft) + kurekodi, KWENYE TRANSACTION MOJA. Tukio
+     * jipya likikataliwa, la zamani linabaki kama lilivyo.
+     */
+    @Nested
+    @DisplayName("kurekebisha tukio")
+    class Correcting {
+
+        private JsonNode correct(String token, int harvestEventId, String date, String fish,
+                                 String kg, String reason, String amount) {
+            String weight = kg == null ? "" : ", weightKg: " + kg;
+            String sale = amount == null ? "" : ", saleAmount: " + amount;
+            return graphql(token, "mutation { correctHarvestEvent(harvestEventId: " + harvestEventId
+                    + ", eventDate: \"" + date + "\", fishCount: " + fish + weight
+                    + ", reason: \"" + reason + "\"" + sale + ") " + EVENT_FIELDS + " }");
+        }
+
+        @Test
+        @DisplayName("tukio jipya linachukua nafasi, la zamani linabaki (soft)")
+        void replacesAndKeepsTheOldRow() {
+            int mistake = recordOk("2025-07-01", "3000", "1500", "SOLD", "4500000");
+
+            JsonNode res = correct(adminToken, mistake, "2025-07-02", "300", "150", "SOLD", "450000");
+
+            assertThat(graphqlErrorCode(res)).as("kurekebisha: %s", res).isNull();
+            JsonNode corrected = res.path("data").path("correctHarvestEvent");
+            int newId = corrected.path("harvestEventId").asInt();
+            assertThat(newId).isNotEqualTo(mistake);
+            assertThat(corrected.path("cycleId").asInt()).isEqualTo(cycleId);
+            assertThat(corrected.path("eventDate").asText()).isEqualTo("2025-07-02");
+            assertThat(corrected.path("fishCount").asInt()).isEqualTo(300);
+            assertThat(corrected.path("saleAmount").asDouble()).isEqualTo(450_000.0);
+
+            JsonNode events = events();
+            assertThat(events).hasSize(1);
+            assertThat(events.get(0).path("harvestEventId").asInt()).isEqualTo(newId);
+            assertThat(deletedRow(mistake)).isTrue();
+        }
+
+        @Test
+        @DisplayName("sababu inaweza kubadilishwa - kiasi kinafuata sheria za sababu mpya")
+        void changesTheReason() {
+            int mistake = recordOk("2025-07-01", "40", "20", "SOLD", "60000");
+
+            JsonNode res = correct(adminToken, mistake, "2025-07-01", "40", null, "DIED", null);
+
+            assertThat(graphqlErrorCode(res)).isNull();
+            JsonNode corrected = res.path("data").path("correctHarvestEvent");
+            assertThat(corrected.path("reason").asText()).isEqualTo("DIED");
+            assertThat(corrected.path("saleAmount").isNull()).isTrue();
+        }
+
+        @Test
+        @DisplayName("marekebisho yaliyokataliwa hayagusi tukio la zamani")
+        void rejectedCorrectionLeavesTheOriginal() {
+            int original = recordOk("2025-07-01", "300", "150", "SOLD", "450000");
+
+            // SOLD bila uzito - inakataliwa kabla ya kufuta chochote.
+            assertThat(graphqlErrorCode(correct(adminToken, original, "2025-07-01", "30", null,
+                    "SOLD", "450000"))).isEqualTo("VALIDATION_ERROR");
+
+            JsonNode events = events();
+            assertThat(events).hasSize(1);
+            assertThat(events.get(0).path("harvestEventId").asInt()).isEqualTo(original);
+            assertThat(events.get(0).path("fishCount").asInt()).isEqualTo(300);
+            assertThat(deletedRow(original)).isFalse();
+        }
+
+        @Test
+        @DisplayName("jumla za kufunga zinasoma tukio lililorekebishwa")
+        void closingSumsTheCorrection() {
+            int mistake = recordOk("2025-07-01", "3000", "1500", "SOLD", "4500000");
+            assertThat(graphqlErrorCode(correct(adminToken, mistake, "2025-07-01", "300", "150",
+                    "SOLD", "450000"))).isNull();
+
+            closeHarvested("2025-07-15");
+
+            JsonNode cycles = graphql(adminToken, "query { cycles { cycleId harvestedCount } }")
+                    .path("data").path("cycles");
+            int harvested = -1;
+            for (JsonNode cycle : cycles) {
+                if (cycle.path("cycleId").asInt() == cycleId) {
+                    harvested = cycle.path("harvestedCount").asInt();
+                }
+            }
+            assertThat(harvested).isEqualTo(300);
+        }
+
+        @Test
+        @DisplayName("mzunguko uliofungwa: kurekebisha kunakataliwa")
+        void refusesAfterClose() {
+            int eventId = recordOk("2025-07-01", "600", "300", "SOLD", "900000");
+            closeHarvested("2025-07-15");
+
+            assertThat(graphqlErrorCode(correct(adminToken, eventId, "2025-07-01", "60", "30",
+                    "SOLD", "90000"))).isEqualTo("CYCLE_ALREADY_CLOSED");
+            assertThat(events().get(0).path("fishCount").asInt()).isEqualTo(600);
+        }
+
+        @Test
+        @DisplayName("tukio lililofutwa au lisilojulikana linakataliwa")
+        void refusesDeletedOrUnknownEvent() {
+            int eventId = recordOk("2025-07-01", "40", null, "DIED", null);
+            assertThat(graphqlErrorCode(delete(adminToken, eventId))).isNull();
+
+            assertThat(graphqlErrorCode(correct(adminToken, eventId, "2025-07-01", "4", null,
+                    "DIED", null))).isEqualTo("VALIDATION_ERROR");
+            assertThat(graphqlErrorCode(correct(adminToken, 999_999, "2025-07-01", "4", null,
+                    "DIED", null))).isEqualTo("VALIDATION_ERROR");
+            assertThat(events()).isEmpty();
+        }
+
+        @Test
+        @DisplayName("WORKER hawezi kurekebisha")
+        void workerCannotCorrect() {
+            int eventId = recordOk("2025-07-01", "40", null, "DIED", null);
+
+            assertThat(graphqlErrorCode(correct(workerToken, eventId, "2025-07-01", "4", null,
+                    "DIED", null))).isEqualTo("FORBIDDEN");
+            assertThat(events().get(0).path("harvestEventId").asInt()).isEqualTo(eventId);
+        }
+    }
+
     /** Safu ya tukio ipo database na imewekwa alama ya kufutwa (na nani). */
     private boolean deletedRow(int harvestEventId) {
         return inTx(() -> {

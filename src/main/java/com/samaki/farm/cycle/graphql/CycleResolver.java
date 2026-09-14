@@ -63,6 +63,11 @@ public class CycleResolver {
         return cycleService.closeCycle(cycleId, outcome, actualHarvestDate, notes);
     }
 
+    @MutationMapping
+    public Cycle correctFingerlingsCount(@Argument Integer cycleId, @Argument Integer fingerlingsCount) {
+        return cycleService.correctFingerlingsCount(cycleId, fingerlingsCount);
+    }
+
     // ---- FEDHA: null bila `view_finance` - angalia FinanceVisibility ----
     //
     // Resolver za UGA, si za query: `Cycle` inafikiwa pia kupitia

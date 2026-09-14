@@ -191,6 +191,12 @@ type Mutation {
         notes: String
     ): Cycle!
 
+    # Kurekebisha idadi ya vifaranga ya siku ya kupanda - kwa mzunguko
+    # UNAOENDELEA pekee (CYCLE_ALREADY_CLOSED vinginevyo: kiwango halisi cha
+    # kuishi kimekwisha kokotolewa kutoka idadi hii). fingerlingsCount > 0
+    # (VALIDATION_ERROR). `edit_cycle`, ILE ILE ya createCycle/closeCycle.
+    correctFingerlingsCount(cycleId: Int!, fingerlingsCount: Int!): Cycle!
+
     # ---------- Matukio ya mavuno ----------
     # Samaki waliotoka kwenye bwawa: SOLD (wameuzwa), DIED (wamekufa),
     # REMOVED (wametolewa wakiwa hai bila kuuzwa). Hakuna sababu nyingine
@@ -218,9 +224,24 @@ type Mutation {
     ): HarvestEvent!
 
     # Soft-delete ya tukio lililokosewa - kwa mzunguko UNAOENDELEA pekee
-    # (CYCLE_ALREADY_CLOSED vinginevyo). Kurekebisha = kufuta + kurekodi
-    # upya. `record_harvest`. Inarudisha `true`; kushindwa ni hitilafu.
+    # (CYCLE_ALREADY_CLOSED vinginevyo). `record_harvest`. Inarudisha
+    # `true`; kushindwa ni hitilafu.
     deleteHarvestEvent(harvestEventId: Int!): Boolean!
+
+    # Kurekebisha tukio: la zamani linafutwa (soft) na jipya kurekodiwa
+    # KWENYE TRANSACTION MOJA - kama correctFeedPurchase. Sheria za uga ni
+    # zile zile za recordHarvestEvent, na zinakaguliwa KABLA ya kufuta: tukio
+    # jipya likikataliwa, la zamani linabaki. Mzunguko ni ule ule wa tukio la
+    # zamani, UNAOENDELEA (CYCLE_ALREADY_CLOSED). `record_harvest`.
+    # Inarudisha tukio JIPYA (kitambulisho kipya).
+    correctHarvestEvent(
+        harvestEventId: Int!
+        eventDate: String!
+        fishCount: Int!
+        weightKg: Float
+        reason: String!
+        saleAmount: Float
+    ): HarvestEvent!
 
     # ---------- Feed ----------
     recordFeedPurchase(input: RecordFeedPurchaseInput!): FeedPurchase!

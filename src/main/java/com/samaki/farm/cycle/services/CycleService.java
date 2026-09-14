@@ -349,6 +349,42 @@ public class CycleService {
     }
 
     /**
+     * KUREKEBISHA idadi ya vifaranga - kwa mzunguko UNAOENDELEA pekee.
+     *
+     * Idadi ya siku ya kupanda ni makadirio, na mara nyingi ni ya chini (au
+     * imekosewa kujaza). Matukio ya mavuno yakizidi idadi hiyo, skrini
+     * inauliza "ulikadiria chini?" - na hii ndiyo njia ya kulijibu.
+     *
+     * UNAOENDELEA PEKEE (CYCLE_ALREADY_CLOSED vinginevyo): kwa mzunguko
+     * uliofungwa, actual_survival_rate imekwisha kokotolewa na database
+     * kutoka idadi hii, na kuibadilisha kungeandika upya matokeo ya mavuno
+     * yaliyokwisha ripotiwa.
+     *
+     * `edit_cycle`, ILE ILE ya kuweka na kufunga - hakuna ruhusa mpya.
+     * Hakuna kingine kinachobadilika: tarehe ya mavuno inayotarajiwa
+     * haitegemei idadi, wala kazi za kila siku.
+     */
+    @Transactional
+    public Cycle correctFingerlingsCount(Integer cycleId, Integer fingerlingsCount) {
+        permissionChecker.requireFarmScope("edit_cycle");
+
+        Cycle cycle = requireCycleInCallersFarm(cycleId);
+        if (!Cycle.ACTIVE.equals(cycle.getStatus())) {
+            throw new ConflictException(
+                    "Mzunguko huu umefungwa (" + cycle.getStatus() + ", tarehe "
+                            + cycle.getActualHarvestDate() + "). Idadi ya vifaranga haiwezi "
+                            + "kurekebishwa baada ya kufunga.",
+                    ErrorCodes.CYCLE_ALREADY_CLOSED);
+        }
+        if (fingerlingsCount == null || fingerlingsCount <= 0) {
+            throw new IllegalArgumentException("Idadi ya vifaranga lazima iwe zaidi ya sifuri.");
+        }
+
+        cycle.setFingerlingsCount(fingerlingsCount);
+        return cycleRepository.saveAndFlush(cycle);
+    }
+
+    /**
      * Mzunguko wa shamba la mwombaji - UKIFUNGWA (FOR UPDATE) - au
      * VALIDATION_ERROR.
      *
