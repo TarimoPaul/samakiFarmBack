@@ -6,6 +6,8 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 
 import jakarta.persistence.LockModeType;
+import java.time.LocalDate;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -62,4 +64,15 @@ public interface CycleRepository extends JpaRepository<Cycle, Integer> {
      */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     Optional<Cycle> findForUpdateByCycleId(Integer cycleId);
+
+    /**
+     * Mizunguko ILIYOFUNGWA ya shamba moja ndani ya kipindi, kwa
+     * actual_harvest_date (mipaka yote miwili imo) - swali la
+     * ProfitabilityService.farmProfitability. `statuses` ni HARVESTED +
+     * FAILED: mzunguko unaoendelea hauna mapato ya mwisho, hivyo hauingii
+     * kipindi chochote hadi ufungwe.
+     */
+    @EntityGraph(attributePaths = {"unit", "species"})
+    List<Cycle> findByUnit_Farm_FarmIdAndStatusInAndActualHarvestDateBetweenOrderByActualHarvestDateAscCycleIdAsc(
+            Integer farmId, Collection<String> statuses, LocalDate fromDate, LocalDate toDate);
 }

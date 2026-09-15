@@ -3,11 +3,31 @@ package com.samaki.farm.asset.repository;
 import com.samaki.farm.asset.entity.Asset;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
+import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.Collection;
 import java.util.List;
 
 public interface AssetRepository extends JpaRepository<Asset, Integer> {
+
+    /**
+     * MTAJI wa shamba ulionunuliwa ndani ya kipindi (acquired_date, mipaka
+     * yote miwili imo). Ni namba ya KANDO ya faida - mali si gharama ya
+     * uendeshaji, na ProfitabilityService haiiweki kwenye farmNetProfit.
+     */
+    @Query(value = """
+            SELECT COALESCE(SUM(a.cost), 0)
+            FROM assets a
+            WHERE a.is_deleted = false
+              AND a.farm_id = :farmId
+              AND a.acquired_date BETWEEN :fromDate AND :toDate
+            """, nativeQuery = true)
+    BigDecimal sumCostAcquiredBetween(@Param("farmId") Integer farmId,
+                                      @Param("fromDate") LocalDate fromDate,
+                                      @Param("toDate") LocalDate toDate);
 
     /**
      * Daftari la MASHAMBA MENGI kwa ombi moja - ndiyo swali pekee la

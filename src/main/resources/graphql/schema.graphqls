@@ -117,6 +117,19 @@ type Query {
     # vinginevyo).
     farmCycles(farmId: Int!): [CycleRef!]!
 
+    # ---------- Faida ----------
+    # `view_finance` (OWNER/FARM_MANAGER) kwa uso WOTE, na shamba lazima
+    # liwe la mwombaji (FORBIDDEN). Hesabu yote iko backend
+    # (ProfitabilityService); frontend inaonyesha tu.
+
+    # Faida ya mzunguko mmoja KABLA ya chakula na gharama za shamba zima.
+    # Mzunguko unaoendelea SI hitilafu: revenue/cycleNetProfit ni null.
+    cycleProfitability(cycleId: Int!): CycleProfitability!
+
+    # Faida ya shamba kwa kipindi (YYYY-MM-DD, mipaka yote miwili imo).
+    # VALIDATION_ERROR ikiwa fromDate > toDate.
+    farmProfitability(farmId: Int!, fromDate: String!, toDate: String!): FarmProfitability!
+
     # Kinachopotea aina hii ikizimwa, KWA SHAMBA LA MWOMBAJI. Ni ONYO la
     # kabla ya kubofya - setFeedTypeActive HAIKATAI kuzima kwa sababu ya
     # namba hizi (angalia FeedTypeDeactivationImpact hapo chini).
@@ -533,6 +546,91 @@ type Cost {
 type CostCategory {
     costCategoryId: ID!
     name: String!
+}
+
+# ============================================================
+# FAIDA - `view_finance`
+#
+# Mapato ni `cycles.total_revenue` iliyohifadhiwa (SOLD). NULL ya
+# database (mizunguko ya kabla ya V25, vifaranga visivyorekodiwa)
+# inahesabiwa kama 0 - na bendera za *Recorded zinasema hivyo.
+# ============================================================
+
+# Faida ya mzunguko - "profit before farm-level feed & shared costs".
+# cycleNetProfit = revenue - fingerlingCost - cycleOperationalCost
+type CycleProfitability {
+    cycleId: ID!
+    # "T1 - Sato (HARVESTED)" - kama CycleRef.label.
+    label: String!
+    # ACTIVE / HARVESTED / FAILED.
+    status: String!
+    # YYYY-MM-DD; null kwa unaoendelea.
+    actualHarvestDate: String
+
+    # Null kwa mzunguko UNAOENDELEA (hauna mapato ya mwisho).
+    revenue: Float
+    # false = total_revenue haikurekodiwa (imehesabiwa kama 0).
+    revenueRecorded: Boolean!
+
+    fingerlingCost: Float!
+    # false = gharama ya vifaranga haikurekodiwa (imehesabiwa kama 0).
+    fingerlingCostRecorded: Boolean!
+
+    # Gharama za uendeshaji zenye cycle_id ya mzunguko huu (tarehe yoyote).
+    cycleOperationalCost: Float!
+
+    # Null kwa mzunguko UNAOENDELEA. CHAKULA HAKIMO.
+    cycleNetProfit: Float
+}
+
+# Jumla ya aina moja ya gharama - ili aina kama "Chakula" ionekane kando
+# ya feedCost (hatari ya kuhesabu chakula mara mbili, V23).
+type CostCategoryAmount {
+    costCategoryId: ID!
+    name: String!
+    amount: Float!
+}
+
+# Faida ya shamba kwa kipindi.
+#   cycleCosts    = fingerlingCost + cycleOperationalCost
+#   farmCosts     = cycleCosts + feedCost + farmOperationalCost
+#   farmNetProfit = farmRevenue - farmCosts
+type FarmProfitability {
+    farmId: ID!
+    farmName: String!
+    fromDate: String!
+    toDate: String!
+
+    # Mapato ya mizunguko ILIYOFUNGWA ambayo actualHarvestDate iko kipindini.
+    farmRevenue: Float!
+
+    # Za mizunguko hiyo hiyo - zinafuata tarehe ya MAVUNO ya mzunguko,
+    # si tarehe ya gharama.
+    fingerlingCost: Float!
+    cycleOperationalCost: Float!
+    cycleOperationalCostByCategory: [CostCategoryAmount!]!
+    cycleCosts: Float!
+
+    # Manunuzi ya chakula kwa purchaseDate, BILA yaliyobatilishwa.
+    feedCost: Float!
+    # Manunuzi mangapi ya kipindi yameachwa nje kwa kubatilishwa.
+    reversedFeedPurchasesExcluded: Int!
+
+    # Gharama za SHAMBA ZIMA (bila mzunguko) kwa costDate.
+    farmOperationalCost: Float!
+    farmOperationalCostByCategory: [CostCategoryAmount!]!
+
+    farmCosts: Float!
+    farmNetProfit: Float!
+
+    cycleCount: Int!
+    # Mizunguko ambayo mapato au gharama ya vifaranga haikurekodiwa.
+    incompleteCycleCount: Int!
+    cycles: [CycleProfitability!]!
+
+    # MTAJI (mali kwa acquiredDate) - KANDO, HAUMO kwenye farmCosts wala
+    # farmNetProfit.
+    capitalTotal: Float!
 }
 
 # Mzunguko kama LEBO ya kuchagua, si rasilimali kamili (linganisha na
